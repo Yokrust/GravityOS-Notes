@@ -1,0 +1,5 @@
+# Agent-harness-first project and run model
+
+> Status: Superseded by `0014-folder-view-removal.md`.
+
+Gravity is now an agent harness and orchestration product first, not a folder-view-first product. We will treat **Project** as the durable container for related work and history, **Thread** as the continuity container with only two canonical types (**Chat Thread** and **Project Thread**), and **Run** as the bounded execution unit across both thread types; **Trace** and **Folder View** remain secondary, retrospective concerns that apply only when a run produces replayable project-shaped evidence. A project remains historically valid even when its local folder attachment becomes unavailable, but it is not executable until that project context is attached and reachable again, and Gravity must warn users that reattaching a different folder may not restore the same working context. This supersedes the older folder-view-first framing in `0001-folder-system-first-architecture.md`, `0005-run-thread-scoped-trace-inspection.md`, `0006-canvas-folder-view.md`, and `0011-project-thread-and-retrospective-folder-view.md`.

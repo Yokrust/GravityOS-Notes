@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023"],
+    "baseUrl": ".",
+    "paths": {
+      "@gravity/domain": ["packages/domain/src/index.ts"],
+      "@gravity/application": ["packages/application/src/index.ts"],
+      "@gravity/adapters": ["packages/adapters/src/index.ts"],
+      "@gravity/testkit": ["packages/testkit/src/index.ts"]
+    },
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  }
+}

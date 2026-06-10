@@ -1,0 +1,26 @@
+{
+  "name": "@gravity/adapters",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@gravity/application": "workspace:*",
+    "@gravity/domain": "workspace:*",
+    "@mariozechner/pi-ai": "^0.72.0",
+    "@mariozechner/pi-coding-agent": "^0.73.1",
+    "better-sqlite3": "^12.4.1",
+    "zod": "^4.1.12"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rimraf dist"
+  }
+}

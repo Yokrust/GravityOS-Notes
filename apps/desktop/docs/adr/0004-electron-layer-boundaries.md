@@ -1,0 +1,3 @@
+# Electron layer boundaries
+
+Gravity will use a balanced Electron architecture with strict layer boundaries. **Electron Main** owns privileged infrastructure such as filesystem access, file watching, process supervision, database connection lifecycles, OS integration, and secure IPC, while product logic stays out of the privileged process. Gravity-specific orchestration lives in an **App Service Layer** behind adapters such as the filesystem, persistence, and `pi` integrations, with runtime semantics normalized through Gravity-owned translation layers. The renderer consumes surface-specific view models through a **UI Composition Layer**, which may cache derived state for responsiveness but does not become the source of truth for domain state.
