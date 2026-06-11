@@ -10,6 +10,7 @@ import {
   SqlitePersistenceAdapter
 } from "@gravity/adapters";
 import {
+  AppearancePreferencesService,
   AuthService,
   AppWorkspaceService,
   CustomSatelliteService,
@@ -23,6 +24,7 @@ import {
   type AppWorkspaceCommand,
   type AppWorkspaceHydrateInput,
   type AppWorkspaceState,
+  type AppearancePreferences,
   type NotesNavigationState,
   type ProjectOverview,
   type ProjectState,
@@ -135,6 +137,7 @@ const threadPanel = new ThreadPanelService(
 );
 const projects = new ProjectService(ids, filesystem, maps, persistence);
 const notes = new NotesService(filesystem, persistence);
+const appearance = new AppearancePreferencesService(persistence);
 const customSatellites = new CustomSatelliteService(
   clock,
   ids,
@@ -192,6 +195,14 @@ export function registerAppIpc(): void {
     appName: "Gravity",
     packageCount: 4
   }));
+  ipcMain.handle("appearance:get-preferences", async () =>
+    appearance.hydrate()
+  );
+  ipcMain.handle(
+    "appearance:save-preferences",
+    async (_, preferences: AppearancePreferences) =>
+      appearance.save(preferences)
+  );
 
   ipcMain.handle("projects:get-state", async () =>
     serializeProjects(await projects.hydrate())

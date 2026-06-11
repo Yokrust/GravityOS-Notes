@@ -214,9 +214,17 @@ export function createInMemoryPersistence(
     ])
   );
   const initialNotesState = initialState?.appMetadata?.notesState;
+  const initialAppearancePreferences =
+    initialState?.appMetadata?.appearancePreferences;
   let appMetadata: AppMetadata = {
     selectedProjectId: initialState?.appMetadata?.selectedProjectId ?? null
   };
+
+  if (initialAppearancePreferences !== undefined) {
+    appMetadata.appearancePreferences = structuredClone(
+      initialAppearancePreferences
+    );
+  }
 
   if (initialNotesState !== undefined) {
     appMetadata.notesState = cloneNotesState(initialNotesState);
@@ -270,6 +278,10 @@ export function createInMemoryPersistence(
       }
     },
     async saveAppMetadata(nextAppMetadata) {
+      const nextAppearancePreferences =
+        nextAppMetadata.appearancePreferences === undefined
+          ? appMetadata.appearancePreferences
+          : structuredClone(nextAppMetadata.appearancePreferences);
       const nextNotesState =
         nextAppMetadata.notesState === undefined
           ? appMetadata.notesState
@@ -278,6 +290,9 @@ export function createInMemoryPersistence(
       appMetadata = {
         ...appMetadata,
         selectedProjectId: nextAppMetadata.selectedProjectId ?? null,
+        ...(nextAppearancePreferences === undefined
+          ? {}
+          : { appearancePreferences: nextAppearancePreferences }),
         ...(nextNotesState === undefined ? {} : { notesState: nextNotesState })
       };
     },

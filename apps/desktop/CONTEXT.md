@@ -48,6 +48,12 @@ _Avoid_: Restore, hide, archive
 The primary surface where the user starts and continues a **Thread**, sees the **Agent Activity Stream**, and receives **Run Results**.
 _Avoid_: project canvas, hidden runtime log
 
+### Appearance
+
+**Appearance Preferences**:
+The user-controlled visual configuration for Gravity, including color scheme, theme colors, gradient composition, and texture. Appearance Preferences apply across desktop surfaces and persist between app sessions.
+_Avoid_: Project theme, workspace theme, per-thread styling, temporary preview state
+
 ### Satellite Model
 
 **Satellite**:
@@ -140,6 +146,8 @@ _Avoid_: Window position, layout snapshot, ephemeral UI state
 - **Empty Trash** permanently deletes all **Trashed Threads**.
 - The currently rendered **Thread** carries the **Active Thread Highlight**.
 - The **Thread Panel** starts and displays **Threads**.
+- **Appearance Preferences** apply consistently across Notes, Threads, and Settings.
+- Theme previews update immediately, while committed **Appearance Preferences** persist across Gravity restarts.
 - Quick Note allows multiple simultaneous floating windows.
 - Pomodoro and Calendar are singleton floating windows.
 - A **Custom Satellite Type** can create multiple independently stateful Satellite Instances.

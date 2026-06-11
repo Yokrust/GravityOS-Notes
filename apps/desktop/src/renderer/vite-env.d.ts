@@ -4,6 +4,10 @@ interface Window {
       appName: string;
       packageCount: number;
     }>;
+    getAppearancePreferences(): Promise<AppearancePreferencesRecord>;
+    saveAppearancePreferences(
+      preferences: AppearancePreferencesRecord
+    ): Promise<AppearancePreferencesRecord>;
     getProjectState(): Promise<ProjectState>;
     registerProject(rootPath: string): Promise<ProjectState>;
     createProject(rootPath: string): Promise<ProjectState>;
@@ -123,6 +127,25 @@ interface Window {
     ): Promise<RunPanelState>;
     stopRun(projectId: string, runId: string): Promise<RunPanelState>;
   };
+}
+
+type AppearanceColorSchemeRecord = "auto" | "light" | "dark";
+
+type ThemeHarmonyRecord =
+  | "complementary"
+  | "splitComplementary"
+  | "analogous"
+  | "triadic"
+  | "floating";
+
+interface AppearancePreferencesRecord {
+  harmony: ThemeHarmonyRecord;
+  opacity: number;
+  points: Array<{ x: number; y: number }>;
+  rotation: number;
+  scheme: AppearanceColorSchemeRecord;
+  texture: number;
+  version: 1;
 }
 
 interface AuthProviderState {

@@ -1,7 +1,17 @@
-import { Bell, Boxes, KeyRound, Mail, Settings, Users } from "lucide-react";
+import type { AppearancePreferences } from "@gravity/application";
+import {
+  Bell,
+  Boxes,
+  KeyRound,
+  Mail,
+  RotateCcw,
+  Settings,
+  Users
+} from "lucide-react";
 import { useState } from "react";
 
 import { SurfaceSwitcher } from "../../components/SurfaceSwitcher.js";
+import { ThemePicker } from "../../components/ThemePicker.js";
 import { useAuthState } from "../../composition/use-auth-state.js";
 import type { AppSurface } from "../../lib/app-surface.js";
 
@@ -21,11 +31,11 @@ const settingsSections = [
     status: "Disponible"
   },
   {
-    description: "Controla capacidades opcionales del producto.",
+    description: "Personaliza cómo se siente y se comporta Gravity.",
     icon: Boxes,
     id: "features",
     label: "Features",
-    status: "Próximamente"
+    status: "Disponible"
   },
   {
     description: "Elige cómo Gravity llama tu atención.",
@@ -58,13 +68,24 @@ const settingsSections = [
 
 export function SettingsPage({
   activeSurface,
+  appearance,
+  initialSection = "api-provider",
   onSelectSurface
 }: {
   activeSurface: AppSurface;
+  appearance: {
+    error: string | null;
+    isHydrated: boolean;
+    preferences: AppearancePreferences;
+    preview: (preferences: AppearancePreferences) => void;
+    reset: () => Promise<void>;
+    save: (preferences: AppearancePreferences) => Promise<void>;
+  };
+  initialSection?: SettingsSection;
   onSelectSurface: (surface: AppSurface) => void;
 }) {
   const [activeSection, setActiveSection] =
-    useState<SettingsSection>("api-provider");
+    useState<SettingsSection>(initialSection);
   const section = settingsSections.find(({ id }) => id === activeSection)!;
 
   return (
@@ -113,11 +134,72 @@ export function SettingsPage({
 
         {activeSection === "api-provider" ? (
           <ApiProviderSettings />
+        ) : activeSection === "features" ? (
+          <AppearanceSettings appearance={appearance} />
         ) : (
           <ComingSoonSection section={section} />
         )}
       </main>
     </section>
+  );
+}
+
+function AppearanceSettings({
+  appearance
+}: {
+  appearance: {
+    error: string | null;
+    isHydrated: boolean;
+    preferences: AppearancePreferences;
+    preview: (preferences: AppearancePreferences) => void;
+    reset: () => Promise<void>;
+    save: (preferences: AppearancePreferences) => Promise<void>;
+  };
+}) {
+  return (
+    <div className="appearance-settings">
+      {appearance.error ? (
+        <div className="settings-error">{appearance.error}</div>
+      ) : null}
+      <section className="appearance-theme-card">
+        <header className="appearance-theme-heading">
+          <div>
+            <span>Appearance</span>
+            <h2>Theme</h2>
+          </div>
+          <div>
+            <span className="appearance-save-state">
+              {appearance.isHydrated ? "Guardado en este equipo" : "Cargando"}
+            </span>
+            <button
+              className="appearance-reset-button"
+              disabled={!appearance.isHydrated}
+              onClick={() => void appearance.reset()}
+              type="button"
+            >
+              <RotateCcw size={13} />
+              Restaurar
+            </button>
+          </div>
+        </header>
+        <p className="appearance-theme-description">
+          Crea una paleta armónica o mueve cada color libremente. Los cambios se
+          aplican en vivo a Gravity y se conservan al reiniciar la aplicación.
+        </p>
+        {appearance.isHydrated ? (
+          <ThemePicker
+            onChange={appearance.preview}
+            onCommit={(preferences) => void appearance.save(preferences)}
+            value={appearance.preferences}
+          />
+        ) : (
+          <div className="appearance-loading">
+            <strong>Cargando tema</strong>
+            <span>Gravity está recuperando tus preferencias guardadas.</span>
+          </div>
+        )}
+      </section>
+    </div>
   );
 }
 

@@ -196,8 +196,21 @@ describe("sqlite persistence adapter", () => {
           "/Users/example/Notes/Personal": true
         }
       };
+      const appearancePreferences = {
+        harmony: "floating" as const,
+        opacity: 0.72,
+        points: [
+          { x: 0.4, y: -0.2 },
+          { x: -0.6, y: 0.1 }
+        ],
+        rotation: 28,
+        scheme: "light" as const,
+        texture: 0.12,
+        version: 1 as const
+      };
 
       await adapter.saveAppMetadata({
+        appearancePreferences,
         selectedProjectId: "project-1"
       });
       await adapter.saveAppMetadata({
@@ -210,6 +223,7 @@ describe("sqlite persistence adapter", () => {
 
       await expect(adapter.loadState()).resolves.toMatchObject({
         appMetadata: {
+          appearancePreferences,
           selectedProjectId: "project-2",
           notesState
         }

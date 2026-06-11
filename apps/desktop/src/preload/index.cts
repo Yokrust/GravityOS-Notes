@@ -13,6 +13,25 @@ interface ProjectState {
   selectedProjectId: string | null;
 }
 
+type AppearanceColorScheme = "auto" | "light" | "dark";
+
+type ThemeHarmony =
+  | "complementary"
+  | "splitComplementary"
+  | "analogous"
+  | "triadic"
+  | "floating";
+
+interface AppearancePreferences {
+  harmony: ThemeHarmony;
+  opacity: number;
+  points: Array<{ x: number; y: number }>;
+  rotation: number;
+  scheme: AppearanceColorScheme;
+  texture: number;
+  version: 1;
+}
+
 interface AuthProviderState {
   displayName: string;
   providerId: string;
@@ -353,6 +372,15 @@ contextBridge.exposeInMainWorld("gravity", {
       appName: string;
       packageCount: number;
     }>,
+  getAppearancePreferences: async () =>
+    ipcRenderer.invoke(
+      "appearance:get-preferences"
+    ) as Promise<AppearancePreferences>,
+  saveAppearancePreferences: async (preferences: AppearancePreferences) =>
+    ipcRenderer.invoke(
+      "appearance:save-preferences",
+      preferences
+    ) as Promise<AppearancePreferences>,
   getProjectState: async () =>
     ipcRenderer.invoke("projects:get-state") as Promise<ProjectState>,
   registerProject: async (rootPath: string) =>

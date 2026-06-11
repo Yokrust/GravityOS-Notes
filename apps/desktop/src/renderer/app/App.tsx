@@ -3,6 +3,7 @@ import { useState } from "react";
 import { FilePlus, FolderPlus, PanelLeft, Settings } from "lucide-react";
 
 import { SatelliteHubButton } from "../components/SatelliteHub.js";
+import { useAppearancePreferences } from "../composition/use-appearance-preferences.js";
 import type { AppSurface } from "../lib/app-surface.js";
 import { useStore } from "../lib/store.js";
 import { NotesPage } from "../surfaces/notes-panel/notes-page.js";
@@ -11,6 +12,7 @@ import { ThreadsPage } from "../surfaces/threads-panel/threads-page.js";
 
 export function App() {
   const [activeSurface, setActiveSurface] = useState<AppSurface>("notes");
+  const appearance = useAppearancePreferences();
 
   return (
     <main className="gravity-workspace">
@@ -24,6 +26,7 @@ export function App() {
           {activeSurface === "settings" ? (
             <SettingsPage
               activeSurface={activeSurface}
+              appearance={appearance}
               onSelectSurface={setActiveSurface}
             />
           ) : activeSurface === "threads" ? (

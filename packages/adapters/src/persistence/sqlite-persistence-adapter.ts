@@ -492,6 +492,10 @@ function normalizeAppMetadata(
       null
   };
 
+  if (appMetadata.appearancePreferences !== undefined) {
+    normalized.appearancePreferences = appMetadata.appearancePreferences;
+  }
+
   if (appMetadata.notesState !== undefined) {
     normalized.notesState = normalizeNotesState(appMetadata.notesState);
   }
@@ -507,10 +511,17 @@ function mergeAppMetadata(
     incoming.notesState === undefined
       ? current.notesState
       : incoming.notesState;
+  const mergedAppearancePreferences =
+    incoming.appearancePreferences === undefined
+      ? current.appearancePreferences
+      : incoming.appearancePreferences;
 
   return normalizeAppMetadata({
     ...current,
     ...incoming,
+    ...(mergedAppearancePreferences === undefined
+      ? {}
+      : { appearancePreferences: mergedAppearancePreferences }),
     ...(mergedNotesState === undefined ? {} : { notesState: mergedNotesState })
   });
 }

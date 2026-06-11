@@ -10,7 +10,8 @@ export default tseslint.config(
       "**/Gravity/**",
       "**/node_modules/**",
       "**/playwright-report/**",
-      "**/test-results/**"
+      "**/test-results/**",
+      "**/vendor/**"
     ]
   },
   js.configs.recommended,

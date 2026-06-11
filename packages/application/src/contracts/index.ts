@@ -92,8 +92,33 @@ export interface NotesNavigationState {
   expandedFolders: Record<string, boolean>;
 }
 
+export type AppearanceColorScheme = "auto" | "light" | "dark";
+
+export type ThemeHarmony =
+  | "complementary"
+  | "splitComplementary"
+  | "analogous"
+  | "triadic"
+  | "floating";
+
+export interface ThemePoint {
+  x: number;
+  y: number;
+}
+
+export interface AppearancePreferences {
+  harmony: ThemeHarmony;
+  opacity: number;
+  points: ThemePoint[];
+  rotation: number;
+  scheme: AppearanceColorScheme;
+  texture: number;
+  version: 1;
+}
+
 export interface AppMetadata {
   selectedProjectId: string | null;
+  appearancePreferences?: AppearancePreferences;
   notesState?: PersistedNotesState | null;
 }
 

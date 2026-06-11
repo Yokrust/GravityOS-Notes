@@ -90,7 +90,11 @@ export function hslToRgb(h: number, s: number, l: number): RGB {
 /**
  * RGB → HSL. Entrada [0,255]. Devuelve `[hueDeg (0..360), s (0..1), l (0..1)]`.
  */
-export function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+export function rgbToHsl(
+  r: number,
+  g: number,
+  b: number
+): [number, number, number] {
   r /= 255;
   g /= 255;
   b /= 255;
@@ -130,7 +134,10 @@ export function hexToRgb(hex: string): RGB {
 
 /** RGB → hex `#rrggbb`. Útil para `<input type="color">`. */
 export function rgbToHex([r, g, b]: RGB): string {
-  const h = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0");
+  const h = (v: number) =>
+    Math.max(0, Math.min(255, Math.round(v)))
+      .toString(16)
+      .padStart(2, "0");
   return `#${h(r)}${h(g)}${h(b)}`;
 }
 
@@ -207,7 +214,10 @@ export type WheelColorMode =
  * - borde   → luminosidad alta (claro)
  * - ángulo  → tono
  */
-export function wheelPositionToColor(point: WheelPoint, opts: WheelColorMode = { mode: "auto" }): RGB {
+export function wheelPositionToColor(
+  point: WheelPoint,
+  opts: WheelColorMode = { mode: "auto" }
+): RGB {
   const distance = magnitudeOf(point);
   const normalizedDistance = 1 - distance; // 1 en el centro, 0 en el borde
   const hue = angleDegOf(point);
@@ -265,7 +275,10 @@ export function colorToWheelPosition(rgb: RGB): WheelPoint {
  * Esencia portada de `calculateCompliments` (sin la selección incremental
  * añadir/quitar punto, que dependía de la UI).
  */
-export function harmonize(primary: WheelPoint, type: HarmonyType): WheelPoint[] {
+export function harmonize(
+  primary: WheelPoint,
+  type: HarmonyType
+): WheelPoint[] {
   const harmony = COLOR_HARMONIES.find((h) => h.type === type);
   if (!harmony || harmony.angles.length === 0) return [];
 

@@ -1,6 +1,7 @@
 export * from "./contracts/index.js";
 export * from "./dto/index.js";
 export * from "./services/auth/auth-service.js";
+export * from "./services/appearance/appearance-preferences-service.js";
 export * from "./services/app-workspace/app-workspace-service.js";
 export * from "./services/editor-surface/editor-surface-service.js";
 export * from "./services/folder-system/folder-system-service.js";
