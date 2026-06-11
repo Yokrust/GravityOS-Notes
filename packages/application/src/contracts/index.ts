@@ -1,5 +1,8 @@
 import type {
   AgentActivityItem,
+  CustomSatelliteInstance,
+  CustomSatelliteProposal,
+  CustomSatelliteType,
   Project,
   Run,
   RunResult,
@@ -46,7 +49,10 @@ export interface PersistencePort {
   saveRun(run: Run): Promise<void>;
   saveRunResult(runResult: RunResult): Promise<void>;
   saveAgentActivityItem(activityItem: AgentActivityItem): Promise<void>;
+  saveCustomSatelliteType(customType: CustomSatelliteType): Promise<void>;
+  saveCustomSatelliteInstance(instance: CustomSatelliteInstance): Promise<void>;
   getRun(runId: string): Promise<Run | null>;
+  deleteCustomSatelliteInstance(instanceId: string): Promise<void>;
   deleteThreadData(threadId: string): Promise<void>;
   deleteProjectData(projectId: string): Promise<void>;
 }
@@ -86,8 +92,33 @@ export interface NotesNavigationState {
   expandedFolders: Record<string, boolean>;
 }
 
+export type AppearanceColorScheme = "auto" | "light" | "dark";
+
+export type ThemeHarmony =
+  | "complementary"
+  | "splitComplementary"
+  | "analogous"
+  | "triadic"
+  | "floating";
+
+export interface ThemePoint {
+  x: number;
+  y: number;
+}
+
+export interface AppearancePreferences {
+  harmony: ThemeHarmony;
+  opacity: number;
+  points: ThemePoint[];
+  rotation: number;
+  scheme: AppearanceColorScheme;
+  texture: number;
+  version: 1;
+}
+
 export interface AppMetadata {
   selectedProjectId: string | null;
+  appearancePreferences?: AppearancePreferences;
   notesState?: PersistedNotesState | null;
 }
 
@@ -99,7 +130,13 @@ export interface PersistedAppState {
   runs: Run[];
   runResults: RunResult[];
   agentActivityItems: AgentActivityItem[];
+  customSatelliteTypes: CustomSatelliteType[];
+  customSatelliteInstances: CustomSatelliteInstance[];
   appMetadata: AppMetadata;
+}
+
+export interface CustomSatelliteGeneratorPort {
+  generate(description: string): Promise<CustomSatelliteProposal>;
 }
 
 export interface ClockPort {

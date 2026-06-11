@@ -11,6 +11,8 @@ import type {
 } from "@gravity/application";
 import type {
   AgentActivityItem,
+  CustomSatelliteInstance,
+  CustomSatelliteType,
   Project,
   Run,
   RunResult,
@@ -199,10 +201,30 @@ export function createInMemoryPersistence(
   const runs = new Map<string, Run>();
   const runResults = new Map<string, RunResult>();
   const agentActivityItems = new Map<string, AgentActivityItem>();
+  const customSatelliteTypes = new Map<string, CustomSatelliteType>(
+    (initialState?.customSatelliteTypes ?? []).map((customType) => [
+      customType.id,
+      customType
+    ])
+  );
+  const customSatelliteInstances = new Map<string, CustomSatelliteInstance>(
+    (initialState?.customSatelliteInstances ?? []).map((instance) => [
+      instance.id,
+      instance
+    ])
+  );
   const initialNotesState = initialState?.appMetadata?.notesState;
+  const initialAppearancePreferences =
+    initialState?.appMetadata?.appearancePreferences;
   let appMetadata: AppMetadata = {
     selectedProjectId: initialState?.appMetadata?.selectedProjectId ?? null
   };
+
+  if (initialAppearancePreferences !== undefined) {
+    appMetadata.appearancePreferences = structuredClone(
+      initialAppearancePreferences
+    );
+  }
 
   if (initialNotesState !== undefined) {
     appMetadata.notesState = cloneNotesState(initialNotesState);
@@ -244,6 +266,8 @@ export function createInMemoryPersistence(
             left.runId.localeCompare(right.runId) ||
             left.sequence - right.sequence
         ),
+        customSatelliteTypes: [...customSatelliteTypes.values()],
+        customSatelliteInstances: [...customSatelliteInstances.values()],
         appMetadata: { ...appMetadata }
       };
     },
@@ -254,6 +278,10 @@ export function createInMemoryPersistence(
       }
     },
     async saveAppMetadata(nextAppMetadata) {
+      const nextAppearancePreferences =
+        nextAppMetadata.appearancePreferences === undefined
+          ? appMetadata.appearancePreferences
+          : structuredClone(nextAppMetadata.appearancePreferences);
       const nextNotesState =
         nextAppMetadata.notesState === undefined
           ? appMetadata.notesState
@@ -262,6 +290,9 @@ export function createInMemoryPersistence(
       appMetadata = {
         ...appMetadata,
         selectedProjectId: nextAppMetadata.selectedProjectId ?? null,
+        ...(nextAppearancePreferences === undefined
+          ? {}
+          : { appearancePreferences: nextAppearancePreferences }),
         ...(nextNotesState === undefined ? {} : { notesState: nextNotesState })
       };
     },
@@ -280,8 +311,17 @@ export function createInMemoryPersistence(
     async saveAgentActivityItem(activityItem) {
       agentActivityItems.set(activityItem.id, activityItem);
     },
+    async saveCustomSatelliteType(customType) {
+      customSatelliteTypes.set(customType.id, customType);
+    },
+    async saveCustomSatelliteInstance(instance) {
+      customSatelliteInstances.set(instance.id, instance);
+    },
     async getRun(runId) {
       return runs.get(runId) ?? null;
+    },
+    async deleteCustomSatelliteInstance(instanceId) {
+      customSatelliteInstances.delete(instanceId);
     },
     async deleteThreadData(threadId) {
       runThreads.delete(threadId);

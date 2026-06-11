@@ -1,4 +1,4 @@
-import { BookOpenText, MessageCircle } from "lucide-react";
+import { BookOpenText, MessageCircle, Settings } from "lucide-react";
 import type { ReactNode } from "react";
 
 import type { AppSurface } from "../lib/app-surface.js";
@@ -23,6 +23,12 @@ export function SurfaceSwitcher({
         icon={<BookOpenText size={16} />}
         label="Notes"
         onClick={() => onSelectSurface("notes")}
+      />
+      <SurfaceButton
+        active={activeSurface === "settings"}
+        icon={<Settings size={16} />}
+        label="Settings"
+        onClick={() => onSelectSurface("settings")}
       />
     </nav>
   );

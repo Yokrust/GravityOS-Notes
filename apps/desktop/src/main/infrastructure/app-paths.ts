@@ -15,21 +15,25 @@ export function resolveDemoTemplatePath(): string {
 }
 
 export function resolveDemoProjectPath(): string {
-  return join(app.getPath("userData"), "demo-folder-system");
+  return join(resolveGravityUserDataPath(), "demo-folder-system");
 }
 
 export function resolvePersistenceDatabasePath(): string {
-  return join(app.getPath("userData"), "gravity.sqlite");
+  return join(resolveGravityUserDataPath(), "gravity.sqlite");
 }
 
 export function resolvePiAuthStoragePath(): string {
-  return join(app.getPath("userData"), "pi-auth.json");
+  return join(resolveGravityUserDataPath(), "pi-auth.json");
 }
 
 export function resolveChatRuntimeWorkspacePath(threadId: string): string {
   return join(
-    app.getPath("userData"),
+    resolveGravityUserDataPath(),
     "chat-runtime-workspaces",
     encodeURIComponent(threadId)
   );
+}
+
+function resolveGravityUserDataPath(): string {
+  return process.env.GRAVITY_USER_DATA_PATH ?? app.getPath("userData");
 }

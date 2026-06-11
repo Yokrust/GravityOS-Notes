@@ -14,7 +14,7 @@ import { useMemo, useState } from "react";
 import { SatelliteShell } from "./SatelliteShell";
 import { useStore } from "@/lib/store";
 import { reminderMatchesDate } from "@/lib/reminder-utils";
-import type { ReminderRecurrence, Satellite } from "@/lib/types";
+import type { BuiltInSatellite, ReminderRecurrence } from "@/lib/types";
 
 const MONTHS = [
   "Enero",
@@ -50,7 +50,7 @@ function isoDate(year: number, month0: number, day: number): string {
   return `${year}-${m}-${d}`;
 }
 
-export function CalendarSatellite({ sat }: { sat: Satellite }) {
+export function CalendarSatellite({ sat }: { sat: BuiltInSatellite }) {
   const { reminders, addReminder, deleteReminder } = useStore();
 
   const today = useMemo(() => new Date(), []);

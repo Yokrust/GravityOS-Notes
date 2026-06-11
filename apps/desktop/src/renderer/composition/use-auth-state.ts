@@ -5,6 +5,13 @@ export function useAuthState() {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    if (!window.gravity) {
+      setError(
+        "Los proveedores solo están disponibles en la app de escritorio."
+      );
+      return null;
+    }
+
     try {
       const nextState = await window.gravity.getAuthState();
       setState(nextState);
@@ -19,6 +26,13 @@ export function useAuthState() {
   }, []);
 
   useEffect(() => {
+    if (!window.gravity) {
+      setError(
+        "Los proveedores solo están disponibles en la app de escritorio."
+      );
+      return;
+    }
+
     let cancelled = false;
 
     void window.gravity

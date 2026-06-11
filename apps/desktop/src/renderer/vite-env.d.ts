@@ -4,6 +4,10 @@ interface Window {
       appName: string;
       packageCount: number;
     }>;
+    getAppearancePreferences(): Promise<AppearancePreferencesRecord>;
+    saveAppearancePreferences(
+      preferences: AppearancePreferencesRecord
+    ): Promise<AppearancePreferencesRecord>;
     getProjectState(): Promise<ProjectState>;
     registerProject(rootPath: string): Promise<ProjectState>;
     createProject(rootPath: string): Promise<ProjectState>;
@@ -35,6 +39,35 @@ interface Window {
       nextName: string
     ): Promise<NotesStateRecord>;
     deleteNotebookNode(nodePath: string): Promise<NotesStateRecord>;
+    getCustomSatelliteState(): Promise<CustomSatelliteStateRecord>;
+    generateCustomSatellite(
+      description: string
+    ): Promise<CustomSatelliteProposal>;
+    confirmCustomSatellite(
+      proposal: CustomSatelliteProposal
+    ): Promise<CustomSatelliteStateRecord>;
+    createCustomSatelliteInstance(input: {
+      customTypeId: string;
+      x?: number;
+      y?: number;
+      z?: number;
+    }): Promise<CustomSatelliteStateRecord>;
+    updateCustomSatelliteValue(input: {
+      instanceId: string;
+      key: string;
+      value: SatelliteValue;
+    }): Promise<CustomSatelliteStateRecord>;
+    updateCustomSatelliteFrame(input: {
+      instanceId: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      z: number;
+    }): Promise<CustomSatelliteStateRecord>;
+    closeCustomSatelliteInstance(
+      instanceId: string
+    ): Promise<CustomSatelliteStateRecord>;
     loadMapDraft(
       projectId: string,
       rootPath: string,
@@ -94,6 +127,25 @@ interface Window {
     ): Promise<RunPanelState>;
     stopRun(projectId: string, runId: string): Promise<RunPanelState>;
   };
+}
+
+type AppearanceColorSchemeRecord = "auto" | "light" | "dark";
+
+type ThemeHarmonyRecord =
+  | "complementary"
+  | "splitComplementary"
+  | "analogous"
+  | "triadic"
+  | "floating";
+
+interface AppearancePreferencesRecord {
+  harmony: ThemeHarmonyRecord;
+  opacity: number;
+  points: Array<{ x: number; y: number }>;
+  rotation: number;
+  scheme: AppearanceColorSchemeRecord;
+  texture: number;
+  version: 1;
 }
 
 interface AuthProviderState {
@@ -190,6 +242,18 @@ interface NoteDocumentRecord {
 interface NotesNavigationState {
   activeNoteId: string | null;
   expandedFolders: Record<string, boolean>;
+}
+
+type SatelliteValue = import("@gravity/domain").SatelliteValue;
+type CustomSatelliteProposal =
+  import("@gravity/domain").CustomSatelliteProposal;
+type CustomSatelliteTypeRecord = import("@gravity/domain").CustomSatelliteType;
+type CustomSatelliteInstanceRecord =
+  import("@gravity/domain").CustomSatelliteInstance;
+
+interface CustomSatelliteStateRecord {
+  customTypes: CustomSatelliteTypeRecord[];
+  instances: CustomSatelliteInstanceRecord[];
 }
 
 interface RunRecord {

@@ -5,9 +5,9 @@ import { Pause, Play, RotateCcw, Timer } from "lucide-react";
 import { SatelliteShell } from "./SatelliteShell";
 import { useStore } from "@/lib/store";
 import { POMODORO_DURATIONS } from "@/lib/pomodoro-timer";
-import type { Satellite } from "@/lib/types";
+import type { BuiltInSatellite } from "@/lib/types";
 
-export function PomodoroSatellite({ sat }: { sat: Satellite }) {
+export function PomodoroSatellite({ sat }: { sat: BuiltInSatellite }) {
   const {
     pomodoroTimer,
     pomodoroStart,

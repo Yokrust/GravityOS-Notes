@@ -1,6 +1,7 @@
 export * from "./contracts/index.js";
 export * from "./dto/index.js";
 export * from "./services/auth/auth-service.js";
+export * from "./services/appearance/appearance-preferences-service.js";
 export * from "./services/app-workspace/app-workspace-service.js";
 export * from "./services/editor-surface/editor-surface-service.js";
 export * from "./services/folder-system/folder-system-service.js";
@@ -8,4 +9,5 @@ export * from "./services/map/map-service.js";
 export * from "./services/notes/notes-service.js";
 export * from "./services/run/run-service.js";
 export * from "./services/run-panel/index.js";
+export * from "./services/satellite/custom-satellite-service.js";
 export * from "./services/thread-panel/thread-panel-service.js";
