@@ -38,6 +38,18 @@ _Avoid_: Editor, document view, thread panel, workspace
 A floating widget the user positions freely on the Canvas. Satellites are global to the Notebook — their position and state persist regardless of which Note is open.
 _Avoid_: Panel, widget, sticky, tool window
 
+**Custom Satellite Type**:
+A reusable, non-executable definition of user-edited structured data rendered as a single-column card and listed under My Satellites in the Satellite Hub.
+_Avoid_: Plugin, script, template instance, generated component
+
+**Satellite Instance**:
+An independently stateful floating occurrence of a Custom Satellite Type on the Canvas.
+_Avoid_: Embedded block, Note attachment, shared template data
+
+**Satellite Creator**:
+The temporary, purpose-limited surface opened from the Satellite Hub to propose, preview, revise, and confirm a Custom Satellite Type.
+_Avoid_: Chat Thread, Satellite, code generator, permanent conversation
+
 ### Linking
 
 **Note Link**:
@@ -69,6 +81,12 @@ _Avoid_: Edit, diff, suggestion, patch
 - The **Note Tree** mirrors the **Notebook Root** filesystem structure
 - The **Canvas** displays exactly one **Note** at a time
 - **Satellites** float on the **Canvas** and are global to the **Notebook**
+- A **Custom Satellite Type** belongs to the **Notebook** and can create many **Satellite Instances**
+- A **Custom Satellite Type** defines only user-edited data and presentation; it cannot define actions, calculations, timers, notifications, or background behavior
+- Every **Custom Satellite Type** uses Gravity's controlled single-column card appearance in the MVP
+- A **Satellite Instance** references exactly one **Custom Satellite Type** and owns its data independently
+- The **Satellite Creator** creates **Custom Satellite Types**, not **Satellite Instances**
+- The **Satellite Creator** cannot access **Notes**, **Folders**, **Threads**, or the **Notebook Root**
 - The AI proposes changes to **Notes** and **Folders** exclusively through the **Scratchpad**
 - A **Scratchpad** contains one or more **Proposed Changes** as an atomic unit
 - A **Proposed Change** can be: create, edit, append, rename, move, or delete a **Note**; or create or rename a **Folder**
@@ -93,6 +111,15 @@ _Avoid_: Edit, diff, suggestion, patch
 > **Dev:** "Where do Satellites save their state? Per Note or globally?"
 > **Domain expert:** "Globally. A **Satellite**'s position and state belong to the **Notebook**, not to any specific **Note**."
 >
+> **Dev:** "Does creating a Character Profile add one to the active Note?"
+> **Domain expert:** "No. It creates a **Custom Satellite Type** in the Satellite Hub. Opening that type creates an independent **Satellite Instance** on the Canvas."
+>
+> **Dev:** "Can a generated Satellite remind me when one of its dates arrives?"
+> **Domain expert:** "No. Custom Satellites store and display user-edited data only. Reminder behavior belongs to the built-in Calendar Satellite."
+>
+> **Dev:** "Can the AI lay out some fields as a table and others as a gallery?"
+> **Domain expert:** "No. Every Custom Satellite uses the same controlled card layout in the MVP; only the property order changes."
+>
 > **Dev:** "Can I call the local folder the user picks a 'vault'?"
 > **Domain expert:** "No — that's the **Notebook Root**. 'Vault' is Obsidian's term. We own **Notebook Root**."
 >
@@ -115,5 +142,9 @@ _Avoid_: Edit, diff, suggestion, patch
 
 - **Canvas** in Gravity Notes means the note editing surface, not a spatial infinite canvas where Notes are positioned. Notes are navigated through the **Note Tree**, not placed spatially.
 - **Satellite** is a shared term with the Agent Harness surface but belongs to the Notes Canvas here. Satellites are global to the **Notebook**, not scoped per **Note**.
+- A **Custom Satellite Type** is reusable; a **Satellite Instance** is one independently stateful occurrence of that type.
+- Custom Satellites are data-only in the MVP; specialized active behavior remains exclusive to Built-in Satellite Types.
+- Custom Satellites use one controlled card appearance in the MVP; layout generation is not an AI capability.
+- The **Satellite Creator** may look conversational, but it is not a general-purpose chat and has no access to Notebook content.
 - **Notebook Root** is not a **Project Context Attachment**. They are independent concepts even though both refer to a local directory the user selects.
 - **Scratchpad** is the only path through which the AI modifies the filesystem in Gravity Notes. Direct writes without user review are not permitted.

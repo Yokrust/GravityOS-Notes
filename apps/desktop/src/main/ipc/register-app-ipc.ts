@@ -5,12 +5,14 @@ import {
   AuthStorage,
   NodeFilesystemAdapter,
   PiAuthAdapter,
+  PiCustomSatelliteGenerator,
   PiRuntimeAdapter,
   SqlitePersistenceAdapter
 } from "@gravity/adapters";
 import {
   AuthService,
   AppWorkspaceService,
+  CustomSatelliteService,
   MapService,
   NotesService,
   ProjectService,
@@ -26,6 +28,7 @@ import {
   type ProjectState,
   type RunPanelState
 } from "@gravity/application";
+import type { CustomSatelliteProposal, SatelliteValue } from "@gravity/domain";
 
 import { resetDemoProject } from "../demo/demo-folder-system.js";
 import {
@@ -132,6 +135,12 @@ const threadPanel = new ThreadPanelService(
 );
 const projects = new ProjectService(ids, filesystem, maps, persistence);
 const notes = new NotesService(filesystem, persistence);
+const customSatellites = new CustomSatelliteService(
+  clock,
+  ids,
+  persistence,
+  new PiCustomSatelliteGenerator({ authStorage })
+);
 const workspace = new AppWorkspaceService({
   projects,
   runPanel,
@@ -269,6 +278,58 @@ export function registerAppIpc(): void {
   );
   ipcMain.handle("notes:delete", async (_, nodePath: string) =>
     notes.deleteNode(nodePath)
+  );
+  ipcMain.handle("custom-satellites:get-state", async () =>
+    customSatellites.hydrate()
+  );
+  ipcMain.handle("custom-satellites:generate", async (_, description: string) =>
+    customSatellites.generate(description)
+  );
+  ipcMain.handle(
+    "custom-satellites:confirm",
+    async (_, proposal: CustomSatelliteProposal) =>
+      customSatellites.confirm(proposal)
+  );
+  ipcMain.handle(
+    "custom-satellites:create-instance",
+    async (
+      _,
+      input: {
+        customTypeId: string;
+        x?: number;
+        y?: number;
+        z?: number;
+      }
+    ) => customSatellites.createInstance(input)
+  );
+  ipcMain.handle(
+    "custom-satellites:update-value",
+    async (
+      _,
+      input: {
+        instanceId: string;
+        key: string;
+        value: SatelliteValue;
+      }
+    ) => customSatellites.updateInstanceValue(input)
+  );
+  ipcMain.handle(
+    "custom-satellites:update-frame",
+    async (
+      _,
+      input: {
+        instanceId: string;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        z: number;
+      }
+    ) => customSatellites.updateInstanceFrame(input)
+  );
+  ipcMain.handle(
+    "custom-satellites:close-instance",
+    async (_, instanceId: string) => customSatellites.closeInstance(instanceId)
   );
   ipcMain.handle(
     "maps:load-draft",

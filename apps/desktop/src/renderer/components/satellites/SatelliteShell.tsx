@@ -26,15 +26,20 @@ export function SatelliteShell({
   title,
   leftSlot,
   footerSlot,
+  onClose,
+  resizable = false,
   children
 }: {
   sat: Satellite;
   title: string;
   leftSlot?: React.ReactNode;
   footerSlot?: React.ReactNode;
+  onClose?: () => void;
+  resizable?: boolean;
   children: React.ReactNode;
 }) {
-  const { closeSatellite, moveSatellite, focusSatellite } = useStore();
+  const { closeSatellite, moveSatellite, resizeSatellite, focusSatellite } =
+    useStore();
   const controls = useDragControls();
   const ref = useRef<HTMLDivElement | null>(null);
   const canvas = useCanvasRef();
@@ -48,6 +53,30 @@ export function SatelliteShell({
     x.set(sat.x);
     y.set(sat.y);
   }, [sat.x, sat.y, x, y]);
+
+  useEffect(() => {
+    if (!resizable || !ref.current) return;
+    let timeoutId: number | null = null;
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry) return;
+      const width = Math.round(entry.contentRect.width);
+      const height = Math.round(entry.contentRect.height);
+      if (width === sat.width && height === sat.height) return;
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+      timeoutId = window.setTimeout(() => {
+        resizeSatellite(sat.id, width, height);
+      }, 120);
+    });
+    observer.observe(ref.current);
+    return () => {
+      observer.disconnect();
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [resizable, resizeSatellite, sat.height, sat.id, sat.width]);
 
   return (
     <motion.div
@@ -73,7 +102,16 @@ export function SatelliteShell({
         zIndex: sat.z,
         // top: 0 / left: 0 baseline so that x/y act as absolute coords
         top: 0,
-        left: 0
+        left: 0,
+        ...(resizable
+          ? {
+              minWidth: 280,
+              minHeight: 240,
+              maxWidth: 640,
+              maxHeight: 760,
+              resize: "both"
+            }
+          : {})
       }}
       onDragEnd={() => {
         // x and y are already clamped by dragConstraints — just persist.
@@ -92,7 +130,7 @@ export function SatelliteShell({
         </div>
         <button
           onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => closeSatellite(sat.id)}
+          onClick={() => (onClose ? onClose() : closeSatellite(sat.id))}
           className="sat-icon-btn ml-auto z-[1]"
           title="Cerrar"
         >

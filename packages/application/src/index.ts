@@ -8,4 +8,5 @@ export * from "./services/map/map-service.js";
 export * from "./services/notes/notes-service.js";
 export * from "./services/run/run-service.js";
 export * from "./services/run-panel/index.js";
+export * from "./services/satellite/custom-satellite-service.js";
 export * from "./services/thread-panel/thread-panel-service.js";

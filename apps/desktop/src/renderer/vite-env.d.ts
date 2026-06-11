@@ -35,6 +35,35 @@ interface Window {
       nextName: string
     ): Promise<NotesStateRecord>;
     deleteNotebookNode(nodePath: string): Promise<NotesStateRecord>;
+    getCustomSatelliteState(): Promise<CustomSatelliteStateRecord>;
+    generateCustomSatellite(
+      description: string
+    ): Promise<CustomSatelliteProposal>;
+    confirmCustomSatellite(
+      proposal: CustomSatelliteProposal
+    ): Promise<CustomSatelliteStateRecord>;
+    createCustomSatelliteInstance(input: {
+      customTypeId: string;
+      x?: number;
+      y?: number;
+      z?: number;
+    }): Promise<CustomSatelliteStateRecord>;
+    updateCustomSatelliteValue(input: {
+      instanceId: string;
+      key: string;
+      value: SatelliteValue;
+    }): Promise<CustomSatelliteStateRecord>;
+    updateCustomSatelliteFrame(input: {
+      instanceId: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      z: number;
+    }): Promise<CustomSatelliteStateRecord>;
+    closeCustomSatelliteInstance(
+      instanceId: string
+    ): Promise<CustomSatelliteStateRecord>;
     loadMapDraft(
       projectId: string,
       rootPath: string,
@@ -190,6 +219,18 @@ interface NoteDocumentRecord {
 interface NotesNavigationState {
   activeNoteId: string | null;
   expandedFolders: Record<string, boolean>;
+}
+
+type SatelliteValue = import("@gravity/domain").SatelliteValue;
+type CustomSatelliteProposal =
+  import("@gravity/domain").CustomSatelliteProposal;
+type CustomSatelliteTypeRecord = import("@gravity/domain").CustomSatelliteType;
+type CustomSatelliteInstanceRecord =
+  import("@gravity/domain").CustomSatelliteInstance;
+
+interface CustomSatelliteStateRecord {
+  customTypes: CustomSatelliteTypeRecord[];
+  instances: CustomSatelliteInstanceRecord[];
 }
 
 interface RunRecord {

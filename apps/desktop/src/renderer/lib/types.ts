@@ -1,3 +1,9 @@
+import type {
+  CustomSatelliteInstance,
+  CustomSatelliteType,
+  SatelliteValue
+} from "@gravity/domain";
+
 export type {
   PomodoroMode,
   PomodoroStatus,
@@ -20,19 +26,28 @@ export interface FileNode {
 
 export type SatelliteKind = "quick-note" | "calendar" | "pomodoro";
 
-export interface Satellite {
+interface SatelliteFrame {
   id: string;
-  kind: SatelliteKind;
-  /** Position of satellite on canvas */
   x: number;
   y: number;
   width: number;
   height: number;
-  /** Stack order */
   z: number;
+}
+
+export interface BuiltInSatellite extends SatelliteFrame {
+  kind: SatelliteKind;
   /** Per-satellite metadata (e.g. which quick-note is being edited) */
   meta?: SatelliteMeta;
 }
+
+export type CustomSatellite = CustomSatelliteInstance & {
+  kind: "custom";
+};
+
+export type Satellite = BuiltInSatellite | CustomSatellite;
+
+export type { CustomSatelliteInstance, CustomSatelliteType, SatelliteValue };
 
 export interface SatelliteMeta {
   activeQuickNoteId?: string;

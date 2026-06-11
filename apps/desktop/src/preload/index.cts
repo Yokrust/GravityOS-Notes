@@ -94,6 +94,77 @@ interface NotesNavigationState {
   expandedFolders: Record<string, boolean>;
 }
 
+type SatelliteValueType =
+  | "shortText"
+  | "longText"
+  | "number"
+  | "date"
+  | "singleSelect"
+  | "multiSelect"
+  | "checkbox"
+  | "progress"
+  | "image";
+
+type SatelliteValue =
+  | string
+  | number
+  | boolean
+  | string[]
+  | { imageId: string };
+
+interface CustomSatellitePropertyProposal {
+  key: string;
+  label: string;
+  valueType: SatelliteValueType;
+  required: boolean;
+  options?: string[];
+  defaultValue?: SatelliteValue;
+}
+
+interface CustomSatelliteProposal {
+  name: string;
+  description?: string;
+  icon:
+    | "sparkles"
+    | "list-checks"
+    | "user-round"
+    | "briefcase"
+    | "book-open"
+    | "shirt"
+    | "heart"
+    | "star"
+    | "calendar-days"
+    | "image";
+  color: "slate" | "amber" | "rose" | "sky" | "emerald" | "violet";
+  appearance: "card";
+  properties: CustomSatellitePropertyProposal[];
+}
+
+interface CustomSatelliteTypeRecord extends CustomSatelliteProposal {
+  id: string;
+  properties: Array<CustomSatellitePropertyProposal & { id: string }>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface CustomSatelliteInstanceRecord {
+  id: string;
+  customTypeId: string;
+  data: Record<string, SatelliteValue>;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  z: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface CustomSatelliteStateRecord {
+  customTypes: CustomSatelliteTypeRecord[];
+  instances: CustomSatelliteInstanceRecord[];
+}
+
 interface RunRecord {
   agentActivityItems: AgentActivityItem[];
   activityRows: RunActivityRow[];
@@ -351,6 +422,56 @@ contextBridge.exposeInMainWorld("gravity", {
     ) as Promise<NotesStateRecord>,
   deleteNotebookNode: async (nodePath: string) =>
     ipcRenderer.invoke("notes:delete", nodePath) as Promise<NotesStateRecord>,
+  getCustomSatelliteState: async () =>
+    ipcRenderer.invoke(
+      "custom-satellites:get-state"
+    ) as Promise<CustomSatelliteStateRecord>,
+  generateCustomSatellite: async (description: string) =>
+    ipcRenderer.invoke(
+      "custom-satellites:generate",
+      description
+    ) as Promise<CustomSatelliteProposal>,
+  confirmCustomSatellite: async (proposal: CustomSatelliteProposal) =>
+    ipcRenderer.invoke(
+      "custom-satellites:confirm",
+      proposal
+    ) as Promise<CustomSatelliteStateRecord>,
+  createCustomSatelliteInstance: async (input: {
+    customTypeId: string;
+    x?: number;
+    y?: number;
+    z?: number;
+  }) =>
+    ipcRenderer.invoke(
+      "custom-satellites:create-instance",
+      input
+    ) as Promise<CustomSatelliteStateRecord>,
+  updateCustomSatelliteValue: async (input: {
+    instanceId: string;
+    key: string;
+    value: SatelliteValue;
+  }) =>
+    ipcRenderer.invoke(
+      "custom-satellites:update-value",
+      input
+    ) as Promise<CustomSatelliteStateRecord>,
+  updateCustomSatelliteFrame: async (input: {
+    instanceId: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    z: number;
+  }) =>
+    ipcRenderer.invoke(
+      "custom-satellites:update-frame",
+      input
+    ) as Promise<CustomSatelliteStateRecord>,
+  closeCustomSatelliteInstance: async (instanceId: string) =>
+    ipcRenderer.invoke(
+      "custom-satellites:close-instance",
+      instanceId
+    ) as Promise<CustomSatelliteStateRecord>,
   loadMapDraft: async (
     projectId: string,
     rootPath: string,

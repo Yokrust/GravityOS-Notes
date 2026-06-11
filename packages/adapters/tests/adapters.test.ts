@@ -7,6 +7,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   createAgentActivityItem,
+  createCustomSatelliteInstance,
+  createCustomSatelliteType,
   createProject,
   createInitialRunResult,
   createRunThread,
@@ -15,8 +17,10 @@ import {
 
 import {
   AuthStorage,
+  createSatelliteCompletionOptions,
   NodeFilesystemAdapter,
   PiAuthAdapter,
+  PiCustomSatelliteGenerator,
   PiRuntimeAdapter,
   SqlitePersistenceAdapter
 } from "../src/index.js";
@@ -52,6 +56,40 @@ describe("node filesystem adapter", () => {
     } finally {
       await rm(rootPath, { force: true, recursive: true });
     }
+  });
+});
+
+describe("pi custom satellite generator", () => {
+  it("uses only provider-portable completion options", () => {
+    expect(
+      createSatelliteCompletionOptions({
+        apiKey: "secret",
+        headers: { "x-test": "value" }
+      })
+    ).toEqual({
+      apiKey: "secret",
+      headers: { "x-test": "value" },
+      maxTokens: 1800,
+      reasoning: "minimal",
+      timeoutMs: 45_000
+    });
+  });
+
+  it("fails clearly when no configured model is available", async () => {
+    const generator = new PiCustomSatelliteGenerator({
+      modelRegistry: {
+        getAvailable() {
+          return [];
+        },
+        async getApiKeyAndHeaders() {
+          return { ok: true };
+        }
+      }
+    });
+
+    await expect(generator.generate("Track my reading")).rejects.toThrow(
+      "No AI provider is configured"
+    );
   });
 });
 
@@ -133,6 +171,8 @@ describe("sqlite persistence adapter", () => {
         runs: [run],
         runResults: [runResult],
         agentActivityItems: [promptActivityItem, commandActivityItem],
+        customSatelliteTypes: [],
+        customSatelliteInstances: [],
         appMetadata: {
           selectedProjectId: project.id
         }
@@ -173,6 +213,59 @@ describe("sqlite persistence adapter", () => {
           selectedProjectId: "project-2",
           notesState
         }
+      });
+    } finally {
+      adapter.close();
+      await rm(rootPath, { force: true, recursive: true });
+    }
+  });
+
+  it("round-trips Custom Satellite Types and their instances", async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), "gravity-db-"));
+    const databasePath = join(rootPath, "gravity.sqlite");
+    const adapter = new SqlitePersistenceAdapter(databasePath);
+    const customType = createCustomSatelliteType({
+      id: "custom-type-1",
+      ids: {
+        next() {
+          return "property-1";
+        }
+      },
+      now: "2026-06-11T12:00:00.000Z",
+      proposal: {
+        name: "Reading Card",
+        icon: "book-open",
+        color: "amber",
+        appearance: "card",
+        properties: [
+          {
+            key: "title",
+            label: "Title",
+            valueType: "shortText",
+            required: true
+          }
+        ]
+      }
+    });
+    const instance = createCustomSatelliteInstance({
+      customType,
+      id: "instance-1",
+      now: "2026-06-11T12:01:00.000Z"
+    });
+
+    try {
+      await adapter.saveCustomSatelliteType(customType);
+      await adapter.saveCustomSatelliteInstance(instance);
+
+      await expect(adapter.loadState()).resolves.toMatchObject({
+        customSatelliteTypes: [customType],
+        customSatelliteInstances: [instance]
+      });
+
+      await adapter.deleteCustomSatelliteInstance(instance.id);
+      await expect(adapter.loadState()).resolves.toMatchObject({
+        customSatelliteTypes: [customType],
+        customSatelliteInstances: []
       });
     } finally {
       adapter.close();
@@ -247,6 +340,8 @@ describe("sqlite persistence adapter", () => {
         runs: [secondRun],
         runResults: [createInitialRunResult(secondRun.id)],
         agentActivityItems: [],
+        customSatelliteTypes: [],
+        customSatelliteInstances: [],
         appMetadata: {
           selectedProjectId: null
         }
@@ -420,6 +515,8 @@ describe("sqlite persistence adapter", () => {
         ],
         runResults: [runResult],
         agentActivityItems: [activityItem],
+        customSatelliteTypes: [],
+        customSatelliteInstances: [],
         appMetadata: {
           selectedProjectId: "project-1"
         }
@@ -596,6 +693,8 @@ describe("sqlite persistence adapter", () => {
         runs: [],
         runResults: [],
         agentActivityItems: [],
+        customSatelliteTypes: [],
+        customSatelliteInstances: [],
         appMetadata: {
           selectedProjectId: null
         }

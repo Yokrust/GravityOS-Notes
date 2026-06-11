@@ -54,9 +54,13 @@ _Avoid_: project canvas, hidden runtime log
 A small, self-contained productivity widget the user can summon as a floating overlay inside Gravity to perform a focused task without leaving the app or opening a separate window. Independent of any folder system or run. Quick Note allows multiple simultaneous floating windows; Pomodoro and Calendar are limited to a single floating window at a time. Closing a satellite window hides its UI but does not necessarily stop the satellite.
 _Avoid_: Agent, folder node, trace overlay, separate Electron window, full application, always-on-top pinning
 
-**Satellite Type**:
-A built-in kind of satellite Gravity ships, such as Quick Note, Calendar, or Pomodoro. Each type defines its own backing data shape. The catalog of available types is fixed by Gravity.
-_Avoid_: User template, custom widget, third-party plugin
+**Built-in Satellite Type**:
+A specialized kind of Satellite shipped by Gravity, such as Quick Note, Calendar, or Pomodoro, with a Gravity-owned data shape and behavior.
+_Avoid_: User template, Custom Satellite Type, third-party plugin
+
+**Custom Satellite Type**:
+A user-created, data-only Satellite definition generated through the Satellite Creator and rendered by Gravity as a controlled card.
+_Avoid_: Plugin, generated code, Built-in Satellite Type
 
 **Note**:
 A persisted rich-text entry managed by the Quick Note satellite. Each **Note** has a user-editable title, rich-text content, and the moments it was created, last edited, and last opened.
@@ -138,6 +142,8 @@ _Avoid_: Window position, layout snapshot, ephemeral UI state
 - The **Thread Panel** starts and displays **Threads**.
 - Quick Note allows multiple simultaneous floating windows.
 - Pomodoro and Calendar are singleton floating windows.
+- A **Custom Satellite Type** can create multiple independently stateful Satellite Instances.
+- Custom Satellites cannot define background behavior, notifications, timers, formulas, or executable actions.
 - Closing a satellite window hides its UI but does not necessarily stop background behavior.
 - A running Pomodoro continues in the background and emits a toast notification with sound when a phase ends.
 - A **Reminder** can fire whether or not the Calendar window is open.

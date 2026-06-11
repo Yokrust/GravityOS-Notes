@@ -14,7 +14,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { SatelliteShell } from "./SatelliteShell";
 import { useStore } from "@/lib/store";
 import { filterNotesByTitle, getLockedNoteIds } from "@/lib/quick-note-utils";
-import type { QuickNote, Satellite } from "@/lib/types";
+import type { BuiltInSatellite, QuickNote } from "@/lib/types";
 
 type FontSize = "sm" | "md" | "lg";
 const FONT_SIZE_PX: Record<FontSize, number> = { sm: 12.5, md: 14, lg: 16 };
@@ -30,7 +30,7 @@ function relativeTime(ts: number): string {
   return `${d}d`;
 }
 
-export function QuickNoteSatellite({ sat }: { sat: Satellite }) {
+export function QuickNoteSatellite({ sat }: { sat: BuiltInSatellite }) {
   const {
     quickNotes,
     satellites,
