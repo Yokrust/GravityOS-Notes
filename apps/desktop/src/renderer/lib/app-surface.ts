@@ -1,1 +1,1 @@
-export type AppSurface = "threads" | "notes";
+export type AppSurface = "threads" | "notes" | "settings";

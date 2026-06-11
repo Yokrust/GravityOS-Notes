@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { FilePlus, FolderPlus, PanelLeft } from "lucide-react";
+import { FilePlus, FolderPlus, PanelLeft, Settings } from "lucide-react";
 
 import { SatelliteHubButton } from "../components/SatelliteHub.js";
 import type { AppSurface } from "../lib/app-surface.js";
 import { useStore } from "../lib/store.js";
 import { NotesPage } from "../surfaces/notes-panel/notes-page.js";
+import { SettingsPage } from "../surfaces/settings-panel/settings-page.js";
 import { ThreadsPage } from "../surfaces/threads-panel/threads-page.js";
 
 export function App() {
@@ -14,10 +15,18 @@ export function App() {
   return (
     <main className="gravity-workspace">
       <div className="board-bg" aria-hidden="true" />
-      <TopBar activeSurface={activeSurface} />
-      <div className="workspace-body is-threads-surface">
+      <TopBar
+        activeSurface={activeSurface}
+        onSelectSurface={setActiveSurface}
+      />
+      <div className={`workspace-body is-${activeSurface}-surface`}>
         <section className="primary-region">
-          {activeSurface === "threads" ? (
+          {activeSurface === "settings" ? (
+            <SettingsPage
+              activeSurface={activeSurface}
+              onSelectSurface={setActiveSurface}
+            />
+          ) : activeSurface === "threads" ? (
             <ThreadsPage
               activeSurface={activeSurface}
               onSelectSurface={setActiveSurface}
@@ -34,8 +43,19 @@ export function App() {
   );
 }
 
-function TopBar({ activeSurface }: { activeSurface: AppSurface }) {
+function TopBar({
+  activeSurface,
+  onSelectSurface
+}: {
+  activeSurface: AppSurface;
+  onSelectSurface: (surface: AppSurface) => void;
+}) {
   const { addFolder, addNote, notebookRoot, toggleSidebar } = useStore();
+  const surfaceName = {
+    notes: "Notes",
+    settings: "Settings",
+    threads: "Threads"
+  }[activeSurface];
 
   return (
     <header className="top-bar">
@@ -51,13 +71,15 @@ function TopBar({ activeSurface }: { activeSurface: AppSurface }) {
         <div className="brand-mark">G</div>
         <span className="brand-name">Gravity</span>
         <span className="brand-rule" aria-hidden="true" />
-        <span className="product-name">
-          {activeSurface === "threads" ? "Threads" : "Notes"}
-        </span>
+        <span className="product-name">{surfaceName}</span>
       </div>
 
       <div className="top-context">
-        {activeSurface === "notes" ? "Notebook" : "Agent harness"}
+        {activeSurface === "notes"
+          ? "Notebook"
+          : activeSurface === "threads"
+            ? "Agent harness"
+            : "Configuration"}
       </div>
 
       <div className="top-right">
@@ -80,6 +102,18 @@ function TopBar({ activeSurface }: { activeSurface: AppSurface }) {
             <SatelliteHubButton />
           </>
         ) : null}
+        <button
+          aria-label="Abrir configuración"
+          aria-pressed={activeSurface === "settings"}
+          className={`top-settings-button ${
+            activeSurface === "settings" ? "is-active" : ""
+          }`}
+          onClick={() => onSelectSurface("settings")}
+          title="Configuración"
+          type="button"
+        >
+          <Settings size={15} />
+        </button>
       </div>
     </header>
   );
