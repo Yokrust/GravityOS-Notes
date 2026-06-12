@@ -153,9 +153,13 @@ export function AppearanceProvider({
     root.dataset["theme"] = theme;
     root.dataset["accent"] = preferences.accent;
     if (preferences.accent === "custom") {
-      root.style.setProperty("--accent-h", String(preferences.customAccent.h));
-      root.style.setProperty("--accent-s", `${preferences.customAccent.s}%`);
-      root.style.setProperty("--accent-l", `${preferences.customAccent.l}%`);
+      // Normalize defensively so a stale persisted value missing `l` can never
+      // emit invalid CSS (e.g. `hsl(... undefined%)`), which would blank the
+      // accent instead of applying the chosen color.
+      const customAccent = normalizeCustomAccent(preferences.customAccent);
+      root.style.setProperty("--accent-h", String(customAccent.h));
+      root.style.setProperty("--accent-s", `${customAccent.s}%`);
+      root.style.setProperty("--accent-l", `${customAccent.l}%`);
     } else {
       root.style.removeProperty("--accent-h");
       root.style.removeProperty("--accent-s");
@@ -201,9 +205,17 @@ export function AppearanceProvider({
       setError(describeError(failure));
       return;
     }
-    if (saved) {
-      preferencesRef.current = saved;
-      setPreferences(saved);
+    const persisted = saved as AppearancePreferencesRecord | null;
+    if (persisted) {
+      // The client authored `next` with full custom-accent precision (h, s, l).
+      // Prefer it over the round-tripped value so a main process that has not
+      // yet been reloaded cannot drop the chosen lightness.
+      const reconciled =
+        next.accent === "custom" && persisted.accent === "custom"
+          ? { ...persisted, customAccent: next.customAccent }
+          : persisted;
+      preferencesRef.current = reconciled;
+      setPreferences(reconciled);
       setError(null);
     }
   }, []);
