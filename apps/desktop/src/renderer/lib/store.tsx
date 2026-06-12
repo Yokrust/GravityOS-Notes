@@ -28,6 +28,7 @@ import {
 } from "./pomodoro-timer";
 import { loadSatelliteData, saveSatelliteData } from "./satellite-persistence";
 import { canvasRef } from "./canvas-ref";
+import { CustomSatelliteMutationCoordinator } from "./custom-satellite-mutations";
 
 function playPomodoroSound() {
   try {
@@ -63,7 +64,11 @@ interface State {
   notesLoading: boolean;
   satellites: Satellite[];
   customSatelliteTypes: CustomSatelliteTypeRecord[];
-  customSatelliteError: string | null;
+  customSatelliteInstances: CustomSatelliteInstanceRecord[];
+  customSatelliteError: {
+    instanceId: string | null;
+    message: string;
+  } | null;
   quickNotes: QuickNote[];
   reminders: Reminder[];
   pomodoroTimer: PomodoroTimer;
@@ -91,7 +96,17 @@ type Action =
       y?: number;
     }
   | { type: "hydrate-custom-satellites"; state: CustomSatelliteStateRecord }
-  | { type: "set-custom-satellite-error"; message: string | null }
+  | {
+      type: "set-custom-satellite-error";
+      instanceId: string | null;
+      message: string;
+    }
+  | { type: "clear-custom-satellite-error" }
+  | {
+      type: "reconcile-custom-satellite-instance";
+      id: string;
+      instance: CustomSatelliteInstanceRecord | null;
+    }
   | {
       type: "set-custom-satellite-value";
       id: string;
@@ -136,6 +151,7 @@ const initialState: State = {
   notesLoading: true,
   satellites: [],
   customSatelliteTypes: [],
+  customSatelliteInstances: [],
   customSatelliteError: null,
   quickNotes: [
     {
@@ -241,16 +257,19 @@ function reducer(state: State, action: Action): State {
       const builtIns = state.satellites.filter(
         (satellite) => satellite.kind !== "custom"
       );
-      const customs: Satellite[] = action.state.instances.map((instance) => ({
-        ...instance,
-        kind: "custom" as const
-      }));
+      const customs: Satellite[] = action.state.instances
+        .filter((instance) => instance.isOpen)
+        .map((instance) => ({
+          ...instance,
+          kind: "custom" as const
+        }));
       const zCounter = customs.reduce(
         (highest, satellite) => Math.max(highest, satellite.z),
         state.zCounter
       );
       return {
         ...state,
+        customSatelliteInstances: action.state.instances,
         customSatelliteTypes: action.state.customTypes,
         customSatelliteError: null,
         satellites: [...builtIns, ...customs],
@@ -258,10 +277,65 @@ function reducer(state: State, action: Action): State {
       };
     }
     case "set-custom-satellite-error":
-      return { ...state, customSatelliteError: action.message };
+      return {
+        ...state,
+        customSatelliteError: {
+          instanceId: action.instanceId,
+          message: action.message
+        }
+      };
+    case "clear-custom-satellite-error":
+      return { ...state, customSatelliteError: null };
+    case "reconcile-custom-satellite-instance": {
+      const withoutTarget = state.satellites.filter(
+        (satellite) => satellite.kind !== "custom" || satellite.id !== action.id
+      );
+      if (!action.instance) {
+        return {
+          ...state,
+          customSatelliteInstances: state.customSatelliteInstances.filter(
+            (instance) => instance.id !== action.id
+          ),
+          satellites: withoutTarget
+        };
+      }
+
+      const customSatelliteInstances = [
+        ...state.customSatelliteInstances.filter(
+          (instance) => instance.id !== action.id
+        ),
+        action.instance
+      ];
+      if (!action.instance.isOpen) {
+        return {
+          ...state,
+          customSatelliteInstances,
+          satellites: withoutTarget
+        };
+      }
+      const reconciled: Satellite = {
+        ...action.instance,
+        kind: "custom"
+      };
+      return {
+        ...state,
+        customSatelliteInstances,
+        satellites: [...withoutTarget, reconciled],
+        zCounter: Math.max(state.zCounter, reconciled.z)
+      };
+    }
     case "set-custom-satellite-value":
       return {
         ...state,
+        customSatelliteInstances: state.customSatelliteInstances.map(
+          (instance) =>
+            instance.id === action.id
+              ? {
+                  ...instance,
+                  data: { ...instance.data, [action.key]: action.value }
+                }
+              : instance
+        ),
         satellites: state.satellites.map((satellite) =>
           satellite.kind === "custom" && satellite.id === action.id
             ? {
@@ -328,6 +402,12 @@ function reducer(state: State, action: Action): State {
     case "close-satellite":
       return {
         ...state,
+        customSatelliteInstances: state.customSatelliteInstances.map(
+          (instance) =>
+            instance.id === action.id
+              ? { ...instance, isOpen: false }
+              : instance
+        ),
         satellites: state.satellites.filter((s) => s.id !== action.id)
       };
     case "move-satellite": {
@@ -470,6 +550,14 @@ interface StoreContextValue extends State {
     key: string,
     value: SatelliteValueRecord
   ) => Promise<void>;
+  saveCustomSatelliteImage: (
+    id: string,
+    key: string,
+    file: File
+  ) => Promise<void>;
+  clearCustomSatelliteError: () => void;
+  reopenCustomSatellite: (id: string) => Promise<void>;
+  deleteCustomSatellite: (id: string) => Promise<void>;
   closeSatellite: (id: string) => void;
   moveSatellite: (id: string, x: number, y: number) => void;
   resizeSatellite: (id: string, width: number, height: number) => void;
@@ -514,6 +602,30 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     };
   });
   const [notesSyncReady, setNotesSyncReady] = useState(false);
+  const customSatelliteMutations = useMemo(
+    () =>
+      new CustomSatelliteMutationCoordinator({
+        loadState: async () => {
+          if (!window.gravity?.getCustomSatelliteState) {
+            throw new Error("No se pudo consultar el estado guardado.");
+          }
+          return window.gravity.getCustomSatelliteState();
+        },
+        onError: (instanceId, message) =>
+          dispatch({
+            type: "set-custom-satellite-error",
+            instanceId,
+            message
+          }),
+        onReconcile: (id, instance) =>
+          dispatch({
+            type: "reconcile-custom-satellite-instance",
+            id,
+            instance
+          })
+      }),
+    []
+  );
 
   useEffect(() => {
     if (typeof localStorage === "undefined") return;
@@ -547,6 +659,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       .catch((error: unknown) =>
         dispatch({
           type: "set-custom-satellite-error",
+          instanceId: null,
           message: getErrorMessage(error)
         })
       );
@@ -839,6 +952,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         } catch (error: unknown) {
           dispatch({
             type: "set-custom-satellite-error",
+            instanceId: null,
             message: getErrorMessage(error)
           });
         }
@@ -846,19 +960,83 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setCustomSatelliteValue: (id, key, value) =>
         dispatch({ type: "set-custom-satellite-value", id, key, value }),
       commitCustomSatelliteValue: async (id, key, value) => {
-        try {
-          const nextState = await window.gravity.updateCustomSatelliteValue({
+        dispatch({ type: "clear-custom-satellite-error" });
+        await customSatelliteMutations.run(id, () =>
+          window.gravity.updateCustomSatelliteValue({
             instanceId: id,
             key,
             value
-          });
-          dispatch({ type: "hydrate-custom-satellites", state: nextState });
-        } catch (error: unknown) {
+          })
+        );
+      },
+      saveCustomSatelliteImage: async (id, key, file) => {
+        dispatch({ type: "clear-custom-satellite-error" });
+        if (file.size === 0 || file.size > 5 * 1024 * 1024) {
           dispatch({
             type: "set-custom-satellite-error",
-            message: getErrorMessage(error)
+            instanceId: id,
+            message: "Las imágenes deben pesar entre 1 byte y 5 MB."
+          });
+          return;
+        }
+        if (
+          !["image/png", "image/jpeg", "image/webp", "image/gif"].includes(
+            file.type
+          )
+        ) {
+          dispatch({
+            type: "set-custom-satellite-error",
+            instanceId: id,
+            message: "Formato de imagen no compatible."
+          });
+          return;
+        }
+        let imageValue: { imageId: string } | null = null;
+        await customSatelliteMutations.run(id, async () => {
+          imageValue = await window.gravity.saveCustomSatelliteImage({
+            bytes: new Uint8Array(await file.arrayBuffer()),
+            instanceId: id,
+            key,
+            mimeType: file.type
+          });
+        });
+        if (imageValue) {
+          dispatch({
+            type: "set-custom-satellite-value",
+            id,
+            key,
+            value: imageValue
           });
         }
+      },
+      clearCustomSatelliteError: () =>
+        dispatch({ type: "clear-custom-satellite-error" }),
+      reopenCustomSatellite: async (id) => {
+        const instance = state.customSatelliteInstances.find(
+          (candidate) => candidate.id === id
+        );
+        if (!instance) return;
+        dispatch({ type: "clear-custom-satellite-error" });
+        dispatch({
+          type: "reconcile-custom-satellite-instance",
+          id,
+          instance: { ...instance, isOpen: true }
+        });
+        await customSatelliteMutations.run(id, () =>
+          window.gravity.reopenCustomSatelliteInstance(id)
+        );
+        dispatch({ type: "set-hub", open: false });
+      },
+      deleteCustomSatellite: async (id) => {
+        dispatch({ type: "clear-custom-satellite-error" });
+        dispatch({
+          type: "reconcile-custom-satellite-instance",
+          id,
+          instance: null
+        });
+        await customSatelliteMutations.run(id, () =>
+          window.gravity.deleteCustomSatelliteInstance(id)
+        );
       },
       closeSatellite: (id) => {
         const target = state.satellites.find(
@@ -866,17 +1044,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         );
         dispatch({ type: "close-satellite", id });
         if (target?.kind !== "custom") return;
-        window.gravity
-          .closeCustomSatelliteInstance(id)
-          .then((nextState) =>
-            dispatch({ type: "hydrate-custom-satellites", state: nextState })
-          )
-          .catch((error: unknown) =>
-            dispatch({
-              type: "set-custom-satellite-error",
-              message: getErrorMessage(error)
-            })
-          );
+        dispatch({ type: "clear-custom-satellite-error" });
+        void customSatelliteMutations.run(id, () =>
+          window.gravity.closeCustomSatelliteInstance(id)
+        );
       },
       moveSatellite: (id, x, y) => {
         const target = state.satellites.find(
@@ -884,21 +1055,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         );
         dispatch({ type: "move-satellite", id, x, y });
         if (target?.kind !== "custom") return;
-        window.gravity
-          .updateCustomSatelliteFrame({
+        dispatch({ type: "clear-custom-satellite-error" });
+        void customSatelliteMutations.run(id, () =>
+          window.gravity.updateCustomSatelliteFrame({
             instanceId: id,
             x,
-            y,
-            width: target.width,
-            height: target.height,
-            z: target.z
+            y
           })
-          .catch((error: unknown) =>
-            dispatch({
-              type: "set-custom-satellite-error",
-              message: getErrorMessage(error)
-            })
-          );
+        );
       },
       resizeSatellite: (id, width, height) => {
         const target = state.satellites.find(
@@ -906,23 +1070,27 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         );
         dispatch({ type: "resize-satellite", id, width, height });
         if (target?.kind !== "custom") return;
-        window.gravity
-          .updateCustomSatelliteFrame({
+        dispatch({ type: "clear-custom-satellite-error" });
+        void customSatelliteMutations.run(id, () =>
+          window.gravity.updateCustomSatelliteFrame({
             instanceId: id,
-            x: target.x,
-            y: target.y,
             width,
-            height,
-            z: target.z
+            height
           })
-          .catch((error: unknown) =>
-            dispatch({
-              type: "set-custom-satellite-error",
-              message: getErrorMessage(error)
-            })
-          );
+        );
       },
-      focusSatellite: (id) => dispatch({ type: "focus-satellite", id }),
+      focusSatellite: (id) => {
+        const target = state.satellites.find(
+          (satellite) => satellite.id === id
+        );
+        const z = state.zCounter + 1;
+        dispatch({ type: "focus-satellite", id });
+        if (target?.kind !== "custom") return;
+        dispatch({ type: "clear-custom-satellite-error" });
+        void customSatelliteMutations.run(id, () =>
+          window.gravity.updateCustomSatelliteFrame({ instanceId: id, z })
+        );
+      },
       setSatelliteMeta: (id, meta) =>
         dispatch({ type: "set-satellite-meta", id, meta }),
       createQuickNote: () => {

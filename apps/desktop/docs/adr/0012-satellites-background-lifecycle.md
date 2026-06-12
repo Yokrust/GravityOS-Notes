@@ -1,3 +1,5 @@
 # Satellites continue running after their window is closed
 
 Closing the floating window of Pomodoro or Calendar hides only the UI; the underlying satellite continues its background behavior — the Pomodoro timer keeps counting and Reminders keep firing as toast notifications with sound. We chose this over treating window close as "pause" or "suspend" because the Pomodoro technique requires the user to close or minimize the timer to focus on work, and Reminders that don't fire while the calendar is hidden are not reminders. Stopping background activity requires an explicit user action — Pomodoro Reset, or removing the Reminder — never a passive consequence of closing the window. Quick Note has no background behavior; closing it is purely a UI operation.
+
+Custom Satellite Instances follow the same close-versus-delete distinction. Closing persists the instance as hidden, including its values and geometry, so reopening restores the same instance. Deleting an instance is a separate confirmed action that removes its persisted data.

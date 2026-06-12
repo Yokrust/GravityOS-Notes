@@ -9,7 +9,9 @@ import {
 
 import type {
   ClockPort,
+  CustomSatelliteFrameUpdate,
   CustomSatelliteGeneratorPort,
+  CustomSatelliteImageAsset,
   CustomSatelliteState,
   IdGeneratorPort,
   PersistencePort
@@ -94,10 +96,18 @@ export class CustomSatelliteService {
     instanceId: string;
     key: string;
     value: SatelliteValue;
-  }): Promise<CustomSatelliteState> {
+  }): Promise<void> {
     const state = await this.hydrate();
     const instance = requireInstance(state, input.instanceId);
     const customType = requireCustomType(state, instance.customTypeId);
+    const property = customType.properties.find(
+      (candidate) => candidate.key === input.key
+    );
+    if (property?.valueType === "image" && input.value !== null) {
+      throw new Error(
+        "Satellite images must be saved through the image upload."
+      );
+    }
     const updated = updateCustomSatelliteInstanceValue({
       customType,
       instance,
@@ -106,37 +116,105 @@ export class CustomSatelliteService {
       now: this.clock.now()
     });
 
-    await this.persistence.saveCustomSatelliteInstance(updated);
-    return this.hydrate();
+    await this.persistence.updateCustomSatelliteInstanceValue({
+      instanceId: updated.id,
+      key: input.key,
+      updatedAt: updated.updatedAt,
+      value: updated.data[input.key]!
+    });
   }
 
   async updateInstanceFrame(input: {
     instanceId: string;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    z: number;
-  }): Promise<CustomSatelliteState> {
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    z?: number;
+  }): Promise<void> {
     const state = await this.hydrate();
     const instance = requireInstance(state, input.instanceId);
-    const updated = {
-      ...instance,
-      x: finiteNumber(input.x, "x"),
-      y: finiteNumber(input.y, "y"),
-      width: boundedNumber(input.width, "width", 280, 640),
-      height: boundedNumber(input.height, "height", 240, 760),
-      z: finiteNumber(input.z, "z"),
-      updatedAt: this.clock.now()
+    const frameUpdate: CustomSatelliteFrameUpdate = {
+      instanceId: instance.id,
+      updatedAt: this.clock.now(),
+      ...(input.x === undefined ? {} : { x: finiteNumber(input.x, "x") }),
+      ...(input.y === undefined ? {} : { y: finiteNumber(input.y, "y") }),
+      ...(input.width === undefined
+        ? {}
+        : { width: boundedNumber(input.width, "width", 280, 640) }),
+      ...(input.height === undefined
+        ? {}
+        : { height: boundedNumber(input.height, "height", 240, 760) }),
+      ...(input.z === undefined ? {} : { z: finiteNumber(input.z, "z") })
     };
+    if (!hasFrameChanges(frameUpdate)) {
+      throw new Error("Satellite frame update must include a changed value.");
+    }
 
-    await this.persistence.saveCustomSatelliteInstance(updated);
-    return this.hydrate();
+    await this.persistence.updateCustomSatelliteInstanceFrame(frameUpdate);
   }
 
-  async closeInstance(instanceId: string): Promise<CustomSatelliteState> {
+  async saveInstanceImage(input: {
+    bytes: Uint8Array;
+    instanceId: string;
+    key: string;
+    mimeType: string;
+  }): Promise<{ imageId: string }> {
+    const state = await this.hydrate();
+    const instance = requireInstance(state, input.instanceId);
+    const customType = requireCustomType(state, instance.customTypeId);
+    const property = customType.properties.find(
+      (candidate) => candidate.key === input.key
+    );
+    if (!property || property.valueType !== "image") {
+      throw new Error(`Unknown Satellite image property: ${input.key}`);
+    }
+
+    const imageId = this.ids.next("custom-satellite-image");
+    await this.persistence.saveCustomSatelliteImageValue({
+      bytes: input.bytes,
+      imageId,
+      instanceId: instance.id,
+      key: property.key,
+      mimeType: input.mimeType,
+      updatedAt: this.clock.now()
+    });
+    return { imageId };
+  }
+
+  async loadImage(imageId: string): Promise<CustomSatelliteImageAsset> {
+    const asset = await this.persistence.loadCustomSatelliteImage(imageId);
+    if (!asset) {
+      throw new Error(`Unknown Custom Satellite image: ${imageId}`);
+    }
+    return asset;
+  }
+
+  async closeInstance(instanceId: string): Promise<void> {
+    await this.setInstanceVisibility(instanceId, false);
+  }
+
+  async reopenInstance(instanceId: string): Promise<void> {
+    await this.setInstanceVisibility(instanceId, true);
+  }
+
+  async deleteInstance(instanceId: string): Promise<void> {
+    const state = await this.hydrate();
+    requireInstance(state, instanceId);
     await this.persistence.deleteCustomSatelliteInstance(instanceId);
-    return this.hydrate();
+  }
+
+  private async setInstanceVisibility(
+    instanceId: string,
+    isOpen: boolean
+  ): Promise<void> {
+    const state = await this.hydrate();
+    const instance = requireInstance(state, instanceId);
+    await this.persistence.updateCustomSatelliteInstanceVisibility({
+      instanceId: instance.id,
+      isOpen,
+      updatedAt: this.clock.now()
+    });
   }
 }
 
@@ -180,4 +258,14 @@ function boundedNumber(
     );
   }
   return finite;
+}
+
+function hasFrameChanges(update: CustomSatelliteFrameUpdate): boolean {
+  return (
+    update.x !== undefined ||
+    update.y !== undefined ||
+    update.width !== undefined ||
+    update.height !== undefined ||
+    update.z !== undefined
+  );
 }

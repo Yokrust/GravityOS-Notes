@@ -54,7 +54,6 @@ export function ThemePicker({
   const latestRef = useRef(value);
   latestRef.current = value;
 
-  const radius = size / 2;
   const points = useMemo(() => resolveAmbientPoints(value), [value]);
   const colors = useMemo(() => points.map(pointToRgb), [points]);
   const activeIndex =
@@ -86,9 +85,11 @@ export function ThemePicker({
   function pointFromEvent(clientX: number, clientY: number) {
     const rect = wheelRef.current?.getBoundingClientRect();
     if (!rect) return value.points[activeIndex] ?? value.points[0];
+    const radiusX = rect.width / 2;
+    const radiusY = rect.height / 2;
     return clampPoint({
-      x: (clientX - rect.left - radius) / radius,
-      y: (clientY - rect.top - radius) / radius
+      x: (clientX - rect.left - radiusX) / radiusX,
+      y: (clientY - rect.top - radiusY) / radiusY
     });
   }
 
@@ -181,8 +182,11 @@ export function ThemePicker({
               }`}
               key={scheme}
               onClick={() => {
-                update({ ...value, scheme }, true);
-                onSchemeSelect?.(scheme);
+                if (onSchemeSelect) {
+                  onSchemeSelect(scheme);
+                } else {
+                  update({ ...value, scheme }, true);
+                }
               }}
               title={label}
               type="button"
@@ -211,7 +215,7 @@ export function ThemePicker({
             onPointerUp={handlePointerUp}
             ref={wheelRef}
             role="slider"
-            style={{ height: size, width: size }}
+            style={{ aspectRatio: "1", maxWidth: "100%", width: size }}
             tabIndex={0}
           >
             {points.map((point, index) => (
@@ -222,8 +226,8 @@ export function ThemePicker({
                 key={`${index}-${point.x}-${point.y}`}
                 style={{
                   background: `rgb(${colors[index]?.join(", ")})`,
-                  left: radius + point.x * radius,
-                  top: radius + point.y * radius
+                  left: `${50 + point.x * 50}%`,
+                  top: `${50 + point.y * 50}%`
                 }}
               />
             ))}

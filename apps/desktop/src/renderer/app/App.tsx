@@ -1,45 +1,43 @@
 import type { ReactNode } from "react";
-import { useState } from "react";
 import { FilePlus, FolderPlus, PanelLeft, Settings } from "lucide-react";
 
 import { AppearanceMenu } from "../components/AppearanceMenu.js";
 import { SatelliteHubButton } from "../components/SatelliteHub.js";
 import { useAppearancePreferences } from "../composition/use-appearance-preferences.js";
 import type { AppSurface } from "../lib/app-surface.js";
+import { useSurfaceNavigation } from "../lib/surface-navigation.js";
 import { useStore } from "../lib/store.js";
 import { NotesPage } from "../surfaces/notes-panel/notes-page.js";
 import { SettingsPage } from "../surfaces/settings-panel/settings-page.js";
 import { ThreadsPage } from "../surfaces/threads-panel/threads-page.js";
 
 export function App() {
-  const [activeSurface, setActiveSurface] = useState<AppSurface>("notes");
+  const { activeSurface, selectSurface, toggleSettings } =
+    useSurfaceNavigation();
   const appearance = useAppearancePreferences();
 
   return (
     <main className="gravity-workspace">
       <div className="board-bg" aria-hidden="true" />
       <div className="board-ambient" aria-hidden="true" />
-      <TopBar
-        activeSurface={activeSurface}
-        onSelectSurface={setActiveSurface}
-      />
+      <TopBar activeSurface={activeSurface} onToggleSettings={toggleSettings} />
       <div className={`workspace-body is-${activeSurface}-surface`}>
         <section className="primary-region">
           {activeSurface === "settings" ? (
             <SettingsPage
               activeSurface={activeSurface}
               appearance={appearance}
-              onSelectSurface={setActiveSurface}
+              onSelectSurface={selectSurface}
             />
           ) : activeSurface === "threads" ? (
             <ThreadsPage
               activeSurface={activeSurface}
-              onSelectSurface={setActiveSurface}
+              onSelectSurface={selectSurface}
             />
           ) : (
             <NotesPage
               activeSurface={activeSurface}
-              onSelectSurface={setActiveSurface}
+              onSelectSurface={selectSurface}
             />
           )}
         </section>
@@ -50,10 +48,10 @@ export function App() {
 
 function TopBar({
   activeSurface,
-  onSelectSurface
+  onToggleSettings
 }: {
   activeSurface: AppSurface;
-  onSelectSurface: (surface: AppSurface) => void;
+  onToggleSettings: () => void;
 }) {
   const { addFolder, addNote, notebookRoot, toggleSidebar } = useStore();
   const surfaceName = {
@@ -114,9 +112,7 @@ function TopBar({
           className={`top-settings-button ${
             activeSurface === "settings" ? "is-active" : ""
           }`}
-          onClick={() =>
-            onSelectSurface(activeSurface === "settings" ? "notes" : "settings")
-          }
+          onClick={onToggleSettings}
           title="Configuración"
           type="button"
         >

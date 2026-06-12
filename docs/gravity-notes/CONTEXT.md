@@ -35,7 +35,7 @@ The writing and editing area where the active Note is displayed. Satellites floa
 _Avoid_: Editor, document view, thread panel, workspace
 
 **Satellite**:
-A floating widget the user positions freely on the Canvas. Satellites are global to the Notebook — their position and state persist regardless of which Note is open.
+A floating widget the user positions freely on the Canvas. Satellites are global to the Notebook — their position and state persist regardless of which Note is open. Closing hides a Satellite without deleting it; permanent deletion is a separate action.
 _Avoid_: Panel, widget, sticky, tool window
 
 ### Linking
@@ -69,6 +69,7 @@ _Avoid_: Edit, diff, suggestion, patch
 - The **Note Tree** mirrors the **Notebook Root** filesystem structure
 - The **Canvas** displays exactly one **Note** at a time
 - **Satellites** float on the **Canvas** and are global to the **Notebook**
+- Closing a **Satellite** preserves its persisted state and position for reopening
 - The AI proposes changes to **Notes** and **Folders** exclusively through the **Scratchpad**
 - A **Scratchpad** contains one or more **Proposed Changes** as an atomic unit
 - A **Proposed Change** can be: create, edit, append, rename, move, or delete a **Note**; or create or rename a **Folder**

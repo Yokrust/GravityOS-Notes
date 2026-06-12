@@ -11,7 +11,7 @@ import {
   CUSTOM_SATELLITE_COLORS,
   CustomSatelliteIcon
 } from "@/lib/satellite-visuals";
-import { CustomSatelliteFields } from "./satellites/CustomSatellite";
+import { CustomSatelliteFields } from "./satellites/CustomSatelliteFields";
 
 export function SatelliteCreator({
   open,

@@ -10,7 +10,9 @@ import {
   createProject,
   createInitialRunResult,
   createRunThread,
-  startRun
+  startRun,
+  type CustomSatelliteInstance,
+  type CustomSatelliteType
 } from "@gravity/domain";
 
 import {
@@ -20,6 +22,12 @@ import {
   PiRuntimeAdapter,
   SqlitePersistenceAdapter
 } from "../src/index.js";
+
+function createPngBytes(byteLength: number): Uint8Array {
+  const bytes = new Uint8Array(byteLength);
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  return bytes;
+}
 
 describe("node filesystem adapter", () => {
   it("detects the root AGENTS.md file in a temp folder system", async () => {
@@ -56,6 +64,317 @@ describe("node filesystem adapter", () => {
 });
 
 describe("sqlite persistence adapter", () => {
+  it("merges custom satellite value and frame updates without replacing unrelated state", async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), "gravity-db-"));
+    const databasePath = join(rootPath, "gravity.sqlite");
+    const adapter = new SqlitePersistenceAdapter(databasePath);
+    const customType: CustomSatelliteType = {
+      appearance: "card",
+      color: "sky",
+      createdAt: "2026-06-12T12:00:00.000Z",
+      icon: "list-checks",
+      id: "custom-satellite-type-1",
+      name: "Concurrent notes",
+      properties: [
+        {
+          id: "satellite-property-1",
+          key: "title",
+          label: "Title",
+          required: false,
+          valueType: "shortText"
+        },
+        {
+          id: "satellite-property-2",
+          key: "notes",
+          label: "Notes",
+          required: false,
+          valueType: "longText"
+        }
+      ],
+      updatedAt: "2026-06-12T12:00:00.000Z"
+    };
+    const instance: CustomSatelliteInstance = {
+      createdAt: "2026-06-12T12:00:00.000Z",
+      customTypeId: customType.id,
+      data: { notes: "", title: "" },
+      height: 420,
+      id: "custom-satellite-instance-1",
+      isOpen: true,
+      updatedAt: "2026-06-12T12:00:00.000Z",
+      width: 320,
+      x: 24,
+      y: 24,
+      z: 1
+    };
+
+    try {
+      await adapter.saveCustomSatelliteType(customType);
+      await adapter.saveCustomSatelliteInstance(instance);
+
+      await Promise.all([
+        adapter.updateCustomSatelliteInstanceValue({
+          instanceId: instance.id,
+          key: "title",
+          updatedAt: "2026-06-12T12:01:00.000Z",
+          value: "Keep this value"
+        }),
+        adapter.updateCustomSatelliteInstanceFrame({
+          instanceId: instance.id,
+          updatedAt: "2026-06-12T12:02:00.000Z",
+          x: 120,
+          y: 80
+        }),
+        adapter.updateCustomSatelliteInstanceFrame({
+          height: 560,
+          instanceId: instance.id,
+          updatedAt: "2026-06-12T12:03:00.000Z",
+          width: 480
+        }),
+        adapter.updateCustomSatelliteInstanceFrame({
+          instanceId: instance.id,
+          updatedAt: "2026-06-12T12:04:00.000Z",
+          z: 7
+        }),
+        adapter.updateCustomSatelliteInstanceVisibility({
+          instanceId: instance.id,
+          isOpen: false,
+          updatedAt: "2026-06-12T12:05:00.000Z"
+        })
+      ]);
+
+      expect(
+        (await adapter.loadState()).customSatelliteInstances[0]
+      ).toMatchObject({
+        data: { notes: "", title: "Keep this value" },
+        height: 560,
+        isOpen: false,
+        width: 480,
+        x: 120,
+        y: 80,
+        z: 7
+      });
+
+      await adapter.updateCustomSatelliteInstanceVisibility({
+        instanceId: instance.id,
+        isOpen: true,
+        updatedAt: "2026-06-12T12:06:00.000Z"
+      });
+      expect(
+        (await adapter.loadState()).customSatelliteInstances[0]
+      ).toMatchObject({
+        data: { notes: "", title: "Keep this value" },
+        isOpen: true,
+        x: 120,
+        y: 80
+      });
+    } finally {
+      adapter.close();
+      await rm(rootPath, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps multiple near-limit images out of hydrated instance JSON and cleans them up", async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), "gravity-db-"));
+    const databasePath = join(rootPath, "gravity.sqlite");
+    const adapter = new SqlitePersistenceAdapter(databasePath);
+    const imageKeys = ["cover", "detail", "receipt"];
+    const customType: CustomSatelliteType = {
+      appearance: "card",
+      color: "sky",
+      createdAt: "2026-06-12T12:00:00.000Z",
+      icon: "image",
+      id: "custom-satellite-type-images",
+      name: "Image archive",
+      properties: imageKeys.map((key, index) => ({
+        id: `satellite-property-${index + 1}`,
+        key,
+        label: key,
+        required: false,
+        valueType: "image"
+      })),
+      updatedAt: "2026-06-12T12:00:00.000Z"
+    };
+    const instance: CustomSatelliteInstance = {
+      createdAt: "2026-06-12T12:00:00.000Z",
+      customTypeId: customType.id,
+      data: {},
+      height: 420,
+      id: "custom-satellite-instance-images",
+      isOpen: true,
+      updatedAt: "2026-06-12T12:00:00.000Z",
+      width: 320,
+      x: 24,
+      y: 24,
+      z: 1
+    };
+    const bytes = createPngBytes(5 * 1024 * 1024 - 32);
+
+    try {
+      await adapter.saveCustomSatelliteType(customType);
+      await adapter.saveCustomSatelliteInstance(instance);
+      for (const [index, key] of imageKeys.entries()) {
+        await adapter.saveCustomSatelliteImageValue({
+          bytes,
+          imageId: `custom-satellite-image-${index + 1}`,
+          instanceId: instance.id,
+          key,
+          mimeType: "image/png",
+          updatedAt: `2026-06-12T12:0${index + 1}:00.000Z`
+        });
+      }
+
+      const state = await adapter.loadState();
+      expect(
+        JSON.stringify(state.customSatelliteInstances).length
+      ).toBeLessThan(2_000);
+      expect(state.customSatelliteInstances[0]?.data).toEqual({
+        cover: { imageId: "custom-satellite-image-1" },
+        detail: { imageId: "custom-satellite-image-2" },
+        receipt: { imageId: "custom-satellite-image-3" }
+      });
+
+      const database = new Database(databasePath, { readonly: true });
+      const stored = database
+        .prepare(
+          `SELECT COUNT(*) AS count, SUM(byte_length) AS total_bytes
+           FROM custom_satellite_images`
+        )
+        .get() as { count: number; total_bytes: number };
+      database.close();
+      expect(stored).toEqual({
+        count: 3,
+        total_bytes: bytes.byteLength * 3
+      });
+
+      await adapter.saveCustomSatelliteImageValue({
+        bytes,
+        imageId: "custom-satellite-image-4",
+        instanceId: instance.id,
+        key: "cover",
+        mimeType: "image/png",
+        updatedAt: "2026-06-12T12:09:00.000Z"
+      });
+      await expect(
+        adapter.loadCustomSatelliteImage("custom-satellite-image-1")
+      ).resolves.toBeNull();
+      await expect(
+        adapter.loadCustomSatelliteImage("custom-satellite-image-4")
+      ).resolves.toMatchObject({ mimeType: "image/png" });
+
+      await adapter.updateCustomSatelliteInstanceValue({
+        instanceId: instance.id,
+        key: "cover",
+        updatedAt: "2026-06-12T12:10:00.000Z",
+        value: null
+      });
+      await expect(
+        adapter.loadCustomSatelliteImage("custom-satellite-image-4")
+      ).resolves.toBeNull();
+      await expect(
+        adapter.loadCustomSatelliteImage("custom-satellite-image-2")
+      ).resolves.toMatchObject({
+        mimeType: "image/png"
+      });
+
+      await adapter.deleteCustomSatelliteInstance(instance.id);
+      await expect(
+        adapter.loadCustomSatelliteImage("custom-satellite-image-2")
+      ).resolves.toBeNull();
+      await expect(
+        adapter.loadCustomSatelliteImage("custom-satellite-image-3")
+      ).resolves.toBeNull();
+    } finally {
+      adapter.close();
+      await rm(rootPath, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects oversized or mismatched Custom Satellite image bytes", async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), "gravity-db-"));
+    const adapter = new SqlitePersistenceAdapter(
+      join(rootPath, "gravity.sqlite")
+    );
+
+    try {
+      await expect(
+        adapter.saveCustomSatelliteImageValue({
+          bytes: createPngBytes(5 * 1024 * 1024 + 1),
+          imageId: "oversized",
+          instanceId: "missing",
+          key: "image",
+          mimeType: "image/png",
+          updatedAt: "2026-06-12T12:00:00.000Z"
+        })
+      ).rejects.toThrow("between 1 byte and 5 MB");
+      await expect(
+        adapter.saveCustomSatelliteImageValue({
+          bytes: new Uint8Array([1, 2, 3, 4]),
+          imageId: "mismatch",
+          instanceId: "missing",
+          key: "image",
+          mimeType: "image/png",
+          updatedAt: "2026-06-12T12:00:00.000Z"
+        })
+      ).rejects.toThrow("do not match");
+    } finally {
+      adapter.close();
+      await rm(rootPath, { force: true, recursive: true });
+    }
+  });
+
+  it("migrates legacy embedded image data URLs into binary assets", async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), "gravity-db-"));
+    const databasePath = join(rootPath, "gravity.sqlite");
+    const embeddedBytes = createPngBytes(32);
+    const embeddedUrl = `data:image/png;base64,${Buffer.from(
+      embeddedBytes
+    ).toString("base64")}`;
+    const instance: CustomSatelliteInstance = {
+      createdAt: "2026-06-12T12:00:00.000Z",
+      customTypeId: "custom-satellite-type-images",
+      data: { cover: { imageId: embeddedUrl } },
+      height: 420,
+      id: "custom-satellite-instance-legacy-image",
+      isOpen: true,
+      updatedAt: "2026-06-12T12:00:00.000Z",
+      width: 320,
+      x: 24,
+      y: 24,
+      z: 1
+    };
+
+    let adapter = new SqlitePersistenceAdapter(databasePath);
+    try {
+      await adapter.saveCustomSatelliteInstance(instance);
+      adapter.close();
+
+      adapter = new SqlitePersistenceAdapter(databasePath);
+      const migrated = (await adapter.loadState()).customSatelliteInstances[0];
+      const imageValue = migrated?.data["cover"];
+      expect(JSON.stringify(migrated)).not.toContain("data:image");
+      expect(imageValue).toMatchObject({
+        imageId: expect.stringMatching(/^custom-satellite-image-/)
+      });
+      if (
+        typeof imageValue !== "object" ||
+        imageValue === null ||
+        Array.isArray(imageValue) ||
+        !("imageId" in imageValue)
+      ) {
+        throw new Error("Expected migrated image reference.");
+      }
+      await expect(
+        adapter.loadCustomSatelliteImage(imageValue.imageId)
+      ).resolves.toEqual({
+        bytes: embeddedBytes,
+        mimeType: "image/png"
+      });
+    } finally {
+      adapter.close();
+      await rm(rootPath, { force: true, recursive: true });
+    }
+  });
+
   it("round-trips persisted folder systems, runs, activity streams, and run results", async () => {
     const rootPath = await mkdtemp(join(tmpdir(), "gravity-db-"));
     const databasePath = join(rootPath, "gravity.sqlite");
@@ -116,7 +435,7 @@ describe("sqlite persistence adapter", () => {
         text: "Listed packages"
       });
       await adapter.saveProjects([project]);
-      await adapter.saveAppMetadata({
+      await adapter.updateAppMetadata({
         selectedProjectId: project.id
       });
       await adapter.saveRunThread(runThread);
@@ -145,7 +464,7 @@ describe("sqlite persistence adapter", () => {
     }
   });
 
-  it("merges notebook metadata updates and round-trips persisted notes", async () => {
+  it("atomically merges concurrent Notes and Appearance metadata updates", async () => {
     const rootPath = await mkdtemp(join(tmpdir(), "gravity-db-"));
     const databasePath = join(rootPath, "gravity.sqlite");
     const adapter = new SqlitePersistenceAdapter(databasePath);
@@ -158,15 +477,27 @@ describe("sqlite persistence adapter", () => {
           "/Users/example/Notes/Personal": true
         }
       };
+      const appearancePreferences = {
+        accent: "azul" as const,
+        customAccent: { h: 205, s: 90 },
+        harmony: "triadic" as const,
+        opacity: 0.72,
+        points: [{ x: 0.2, y: -0.4 }],
+        rotation: 30,
+        scheme: "light" as const,
+        theme: "porcelana" as const,
+        texture: 0.12,
+        version: 1 as const
+      };
 
-      await adapter.saveAppMetadata({
+      await adapter.updateAppMetadata({
         selectedProjectId: "project-1"
       });
-      await adapter.saveAppMetadata({
-        selectedProjectId: "project-1",
-        notesState
-      });
-      await adapter.saveAppMetadata({
+      await Promise.all([
+        adapter.updateAppMetadata({ notesState }),
+        adapter.updateAppMetadata({ appearancePreferences })
+      ]);
+      await adapter.updateAppMetadata({
         selectedProjectId: "project-2"
       });
 
@@ -174,6 +505,7 @@ describe("sqlite persistence adapter", () => {
         customSatelliteTypes: [],
         customSatelliteInstances: [],
         appMetadata: {
+          appearancePreferences,
           selectedProjectId: "project-2",
           notesState
         }
@@ -216,7 +548,7 @@ describe("sqlite persistence adapter", () => {
       });
 
       await adapter.saveProjects([firstProject, secondProject]);
-      await adapter.saveAppMetadata({
+      await adapter.updateAppMetadata({
         selectedProjectId: firstProject.id
       });
       await adapter.saveRunThread(

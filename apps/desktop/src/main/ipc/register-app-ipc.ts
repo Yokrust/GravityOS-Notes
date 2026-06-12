@@ -355,17 +355,40 @@ export function registerAppIpc(): void {
       _,
       input: {
         instanceId: string;
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-        z: number;
+        x?: number;
+        y?: number;
+        width?: number;
+        height?: number;
+        z?: number;
       }
     ) => customSatellites.updateInstanceFrame(input)
   );
   ipcMain.handle(
+    "custom-satellites:save-image",
+    async (
+      _,
+      input: {
+        bytes: Uint8Array;
+        instanceId: string;
+        key: string;
+        mimeType: string;
+      }
+    ) => customSatellites.saveInstanceImage(input)
+  );
+  ipcMain.handle("custom-satellites:load-image", async (_, imageId: string) =>
+    customSatellites.loadImage(imageId)
+  );
+  ipcMain.handle(
     "custom-satellites:close-instance",
     async (_, instanceId: string) => customSatellites.closeInstance(instanceId)
+  );
+  ipcMain.handle(
+    "custom-satellites:reopen-instance",
+    async (_, instanceId: string) => customSatellites.reopenInstance(instanceId)
+  );
+  ipcMain.handle(
+    "custom-satellites:delete-instance",
+    async (_, instanceId: string) => customSatellites.deleteInstance(instanceId)
   );
   ipcMain.handle("auth:get-state", async () =>
     serializeAuthState(await authService.hydrate())

@@ -7,7 +7,6 @@ import {
 } from "@gravity/domain";
 
 import type {
-  AppMetadata,
   FilesystemPort,
   ProjectOverview,
   ProjectState,
@@ -220,13 +219,11 @@ export class ProjectService {
   }
 
   private async persistState(): Promise<void> {
-    const appMetadata: AppMetadata = {
-      selectedProjectId: this.selectedProjectId
-    };
-
     await this.persistence.saveProjects(
       [...this.entries.values()].map((entry) => entry.project)
     );
-    await this.persistence.saveAppMetadata(appMetadata);
+    await this.persistence.updateAppMetadata({
+      selectedProjectId: this.selectedProjectId
+    });
   }
 }

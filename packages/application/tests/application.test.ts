@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   completeRun,
+  createCustomSatelliteInstance,
+  createCustomSatelliteType,
   createProject,
   createProjectThread,
   startRun
@@ -8,9 +10,14 @@ import {
 import { PiRuntimeAdapter } from "../../adapters/src/index.js";
 
 import {
+  AppearancePreferencesService,
+  normalizeAppearancePreferences,
+  type AppMetadata,
   AuthService,
   AppWorkspaceService,
+  CustomSatelliteService,
   MapService,
+  NotesService,
   ProjectService,
   RunPanelService,
   RunService,
@@ -24,6 +31,276 @@ import {
   createStubAuth,
   createStubRuntime
 } from "../../testkit/src/index.js";
+
+describe("app metadata persistence", () => {
+  it("preserves concurrent Notes navigation and Appearance updates", async () => {
+    const persistence = createInterleavedMetadataPersistence();
+    const appearance = new AppearancePreferencesService(persistence);
+    const notes = new NotesService(createStubFilesystem([]), persistence);
+    const appearancePreferences = {
+      accent: "azul" as const,
+      customAccent: { h: 205, s: 90 },
+      harmony: "triadic" as const,
+      opacity: 0.72,
+      points: [{ x: 0.2, y: -0.4 }],
+      rotation: 30,
+      scheme: "light" as const,
+      theme: "porcelana" as const,
+      texture: 0.12,
+      version: 1 as const
+    };
+    const notesState = {
+      activeNoteId: "/Notes/Ideas.md",
+      expandedFolders: { "/Notes/Projects": true }
+    };
+
+    await Promise.all([
+      appearance.save(appearancePreferences),
+      notes.saveNavigation(notesState)
+    ]);
+
+    await expect(persistence.loadState()).resolves.toMatchObject({
+      appMetadata: {
+        appearancePreferences,
+        notesState: {
+          ...notesState,
+          notebookRoot: "/Notes"
+        },
+        selectedProjectId: "project-1"
+      }
+    });
+  });
+});
+
+describe("appearance preference normalization", () => {
+  it("migrates legacy light preferences to a matching canonical theme", () => {
+    expect(
+      normalizeAppearancePreferences({
+        harmony: "analogous",
+        opacity: 0.3,
+        points: [{ x: 0.56, y: -0.32 }],
+        rotation: -45,
+        scheme: "light",
+        texture: 0.06,
+        version: 1
+      })
+    ).toMatchObject({
+      accent: "violeta",
+      customAccent: { h: 256, s: 88, l: 76 },
+      scheme: "light",
+      theme: "porcelana"
+    });
+  });
+
+  it("preserves a custom accent's lightness so the picked color is reproduced", () => {
+    expect(
+      normalizeAppearancePreferences({
+        ...normalizeAppearancePreferences(null),
+        accent: "custom",
+        customAccent: { h: 120, s: 50, l: 40 }
+      })
+    ).toMatchObject({
+      accent: "custom",
+      customAccent: { h: 120, s: 50, l: 40 }
+    });
+  });
+
+  it("defaults a missing custom accent lightness instead of dropping it", () => {
+    expect(
+      normalizeAppearancePreferences({
+        accent: "custom",
+        customAccent: { h: 120, s: 50 }
+      }).customAccent.l
+    ).toBe(76);
+  });
+
+  it("normalizes contradictory explicit scheme and theme values", () => {
+    expect(
+      normalizeAppearancePreferences({
+        ...normalizeAppearancePreferences(null),
+        scheme: "dark",
+        theme: "cristal"
+      })
+    ).toMatchObject({
+      scheme: "dark",
+      theme: "cristal-noche"
+    });
+  });
+});
+
+describe("custom satellite persistence", () => {
+  it("stores and loads image bytes through a stable instance reference", async () => {
+    const { persistence, service } = createCustomSatelliteTestContext();
+    const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+
+    const value = await service.saveInstanceImage({
+      bytes,
+      instanceId: "custom-satellite-instance-1",
+      key: "image",
+      mimeType: "image/png"
+    });
+
+    expect(value.imageId).toMatch(/^custom-satellite-image-/);
+    expect(
+      (await persistence.loadState()).customSatelliteInstances[0]?.data
+    ).toMatchObject({ image: value });
+    await expect(service.loadImage(value.imageId)).resolves.toEqual({
+      bytes,
+      mimeType: "image/png"
+    });
+  });
+
+  it("closes without deleting and reopens the same persisted instance", async () => {
+    const { persistence, service } = createCustomSatelliteTestContext();
+
+    await service.updateInstanceValue({
+      instanceId: "custom-satellite-instance-1",
+      key: "title",
+      value: "Keep me"
+    });
+    await service.updateInstanceFrame({
+      instanceId: "custom-satellite-instance-1",
+      x: 120,
+      y: 80
+    });
+    await service.closeInstance("custom-satellite-instance-1");
+
+    expect(
+      (await persistence.loadState()).customSatelliteInstances[0]
+    ).toMatchObject({
+      data: { title: "Keep me" },
+      isOpen: false,
+      x: 120,
+      y: 80
+    });
+
+    await service.reopenInstance("custom-satellite-instance-1");
+
+    expect(
+      (await persistence.loadState()).customSatelliteInstances[0]
+    ).toMatchObject({
+      data: { title: "Keep me" },
+      id: "custom-satellite-instance-1",
+      isOpen: true,
+      x: 120,
+      y: 80
+    });
+  });
+
+  it("permanently deletes only through the explicit delete operation", async () => {
+    const { persistence, service } = createCustomSatelliteTestContext();
+
+    await service.closeInstance("custom-satellite-instance-1");
+    expect(
+      (await persistence.loadState()).customSatelliteInstances
+    ).toHaveLength(1);
+
+    await service.deleteInstance("custom-satellite-instance-1");
+    expect(
+      (await persistence.loadState()).customSatelliteInstances
+    ).toHaveLength(0);
+  });
+
+  it("persists null when an optional field is cleared", async () => {
+    const { persistence, service } = createCustomSatelliteTestContext();
+
+    await service.updateInstanceValue({
+      instanceId: "custom-satellite-instance-1",
+      key: "title",
+      value: null
+    });
+
+    expect(
+      (await persistence.loadState()).customSatelliteInstances[0]?.data
+    ).toMatchObject({ title: null });
+  });
+
+  it("preserves concurrent updates to different values", async () => {
+    const { persistence, service } = createCustomSatelliteTestContext();
+
+    const responses = await Promise.all([
+      service.updateInstanceValue({
+        instanceId: "custom-satellite-instance-1",
+        key: "title",
+        value: "Ship concurrent writes"
+      }),
+      service.updateInstanceValue({
+        instanceId: "custom-satellite-instance-1",
+        key: "notes",
+        value: "Keep both fields"
+      })
+    ]);
+
+    expect(responses).toEqual([undefined, undefined]);
+    const state = await persistence.loadState();
+    expect(state.customSatelliteInstances[0]?.data).toMatchObject({
+      notes: "Keep both fields",
+      title: "Ship concurrent writes"
+    });
+  });
+
+  it("preserves a concurrent value update and frame update", async () => {
+    const { persistence, service } = createCustomSatelliteTestContext();
+
+    const responses = await Promise.all([
+      service.updateInstanceValue({
+        instanceId: "custom-satellite-instance-1",
+        key: "title",
+        value: "Keep this value"
+      }),
+      service.updateInstanceFrame({
+        instanceId: "custom-satellite-instance-1",
+        x: 120,
+        y: 80,
+        width: 480,
+        height: 560,
+        z: 7
+      })
+    ]);
+
+    expect(responses).toEqual([undefined, undefined]);
+    const instance = (await persistence.loadState())
+      .customSatelliteInstances[0];
+    expect(instance).toMatchObject({
+      data: {
+        notes: null,
+        title: "Keep this value"
+      },
+      height: 560,
+      width: 480,
+      x: 120,
+      y: 80,
+      z: 7
+    });
+  });
+
+  it("preserves concurrent position and size updates", async () => {
+    const { persistence, service } = createCustomSatelliteTestContext();
+
+    const responses = await Promise.all([
+      service.updateInstanceFrame({
+        instanceId: "custom-satellite-instance-1",
+        x: 120,
+        y: 80
+      }),
+      service.updateInstanceFrame({
+        height: 560,
+        instanceId: "custom-satellite-instance-1",
+        width: 480
+      })
+    ]);
+
+    expect(responses).toEqual([undefined, undefined]);
+    expect(
+      (await persistence.loadState()).customSatelliteInstances[0]
+    ).toMatchObject({
+      height: 560,
+      width: 480,
+      x: 120,
+      y: 80
+    });
+  });
+});
 
 describe("application bootstrap", () => {
   it("registers a project, selects it, and reports root map presence", async () => {
@@ -2231,3 +2508,103 @@ describe("application bootstrap", () => {
     expect(capturedCwd).toBe("C:/projects/gravity");
   });
 });
+
+function createCustomSatelliteTestContext() {
+  const now = "2026-06-12T12:00:00.000Z";
+  const ids = createSequentialIdGenerator();
+  const proposal = {
+    appearance: "card" as const,
+    color: "sky" as const,
+    icon: "list-checks" as const,
+    name: "Concurrent notes",
+    properties: [
+      {
+        defaultValue: "",
+        key: "title",
+        label: "Title",
+        required: false,
+        valueType: "shortText" as const
+      },
+      {
+        defaultValue: "",
+        key: "notes",
+        label: "Notes",
+        required: false,
+        valueType: "longText" as const
+      },
+      {
+        key: "image",
+        label: "Image",
+        required: false,
+        valueType: "image" as const
+      }
+    ]
+  };
+  const customType = createCustomSatelliteType({
+    id: "custom-satellite-type-1",
+    ids,
+    now,
+    proposal
+  });
+  const instance = createCustomSatelliteInstance({
+    customType,
+    id: "custom-satellite-instance-1",
+    now
+  });
+  const persistence = createInMemoryPersistence({
+    customSatelliteInstances: [instance],
+    customSatelliteTypes: [customType]
+  });
+  const service = new CustomSatelliteService(
+    createFixedClock("2026-06-12T12:01:00.000Z"),
+    ids,
+    persistence,
+    {
+      async generate() {
+        return proposal;
+      }
+    }
+  );
+
+  return { persistence, service };
+}
+
+function createInterleavedMetadataPersistence() {
+  const base = createInMemoryPersistence();
+  let appMetadata: AppMetadata = {
+    selectedProjectId: "project-1",
+    notesState: {
+      activeNoteId: null,
+      expandedFolders: {},
+      notebookRoot: "/Notes"
+    }
+  };
+  const pendingWrites: Array<{
+    update: Parameters<typeof base.updateAppMetadata>[0];
+    resolve: () => void;
+  }> = [];
+
+  return {
+    ...base,
+    async loadState() {
+      return {
+        ...(await base.loadState()),
+        appMetadata
+      };
+    },
+    async updateAppMetadata(update: (typeof pendingWrites)[number]["update"]) {
+      await new Promise<void>((resolve) => {
+        pendingWrites.push({ update, resolve });
+        if (pendingWrites.length !== 2) return;
+
+        for (const pending of pendingWrites) {
+          appMetadata = {
+            ...appMetadata,
+            ...pending.update
+          };
+          pending.resolve();
+        }
+      });
+    }
+  };
+}

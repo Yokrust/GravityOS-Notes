@@ -5,6 +5,12 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   resolve: {
     alias: {
+      "@gravity/application/appearance": fileURLToPath(
+        new URL(
+          "./packages/application/src/services/appearance/appearance-preferences-service.ts",
+          import.meta.url
+        )
+      ),
       "@gravity/application": fileURLToPath(
         new URL("./packages/application/src/index.ts", import.meta.url)
       ),

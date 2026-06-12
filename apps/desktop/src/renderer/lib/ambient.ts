@@ -24,11 +24,14 @@ const DARK_SURFACE: Rgb = [8, 8, 8];
 const LIGHT_SURFACE: Rgb = [248, 248, 246];
 
 export const DEFAULT_AMBIENT_PREFERENCES: AppearancePreferencesRecord = {
+  accent: "violeta",
+  customAccent: { h: 256, s: 88, l: 76 },
   harmony: "analogous",
   opacity: 0.3,
   points: [{ x: 0.56, y: -0.32 }],
   rotation: -45,
   scheme: "dark",
+  theme: "grafito",
   texture: 0.06,
   version: 1
 };
@@ -36,6 +39,7 @@ export const DEFAULT_AMBIENT_PREFERENCES: AppearancePreferencesRecord = {
 export function cloneDefaultAmbientPreferences(): AppearancePreferencesRecord {
   return {
     ...DEFAULT_AMBIENT_PREFERENCES,
+    customAccent: { ...DEFAULT_AMBIENT_PREFERENCES.customAccent },
     points: DEFAULT_AMBIENT_PREFERENCES.points.map((point) => ({ ...point }))
   };
 }

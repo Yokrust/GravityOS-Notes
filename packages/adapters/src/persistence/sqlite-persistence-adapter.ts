@@ -1,7 +1,14 @@
 import Database from "better-sqlite3";
+import { randomUUID } from "node:crypto";
 
 import type {
   AppMetadata,
+  AppMetadataUpdate,
+  CustomSatelliteFrameUpdate,
+  CustomSatelliteImageAsset,
+  CustomSatelliteImageInput,
+  CustomSatelliteVisibilityUpdate,
+  CustomSatelliteValueUpdate,
   PersistedAppState,
   PersistencePort
 } from "@gravity/application";
@@ -14,6 +21,7 @@ import type {
   Run,
   RunResult,
   RunThread,
+  SatelliteValue,
   Thread,
   ThreadMessage
 } from "@gravity/domain";
@@ -22,6 +30,15 @@ type SqliteDatabase = InstanceType<typeof Database>;
 type PayloadRow = { payload: string };
 type ProjectIdRow = { project_id: string };
 type RunIdRow = { id: string };
+type ImageAssetRow = { bytes: Buffer; mime_type: string };
+
+const MAX_CUSTOM_SATELLITE_IMAGE_BYTES = 5 * 1024 * 1024;
+const CUSTOM_SATELLITE_IMAGE_SIGNATURES = {
+  "image/gif": [Buffer.from("GIF87a"), Buffer.from("GIF89a")],
+  "image/jpeg": [Buffer.from([0xff, 0xd8, 0xff])],
+  "image/png": [Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])],
+  "image/webp": [Buffer.from("RIFF")]
+} as const;
 
 const DEFAULT_APP_METADATA: AppMetadata = {
   selectedProjectId: null
@@ -34,6 +51,7 @@ export class SqlitePersistenceAdapter implements PersistencePort {
     this.database = new Database(databasePath);
     this.database.pragma("journal_mode = WAL");
     this.initialize();
+    this.migrateEmbeddedCustomSatelliteImages();
   }
 
   async loadState(): Promise<PersistedAppState> {
@@ -90,18 +108,24 @@ export class SqlitePersistenceAdapter implements PersistencePort {
     replaceProjects(projects);
   }
 
-  async saveAppMetadata(appMetadata: AppMetadata): Promise<void> {
-    const normalizedAppMetadata = mergeAppMetadata(
-      this.readAppMetadata(),
-      appMetadata
+  async updateAppMetadata(update: AppMetadataUpdate): Promise<void> {
+    const updateMetadata = this.database.transaction(
+      (metadataUpdate: AppMetadataUpdate) => {
+        const normalizedAppMetadata = mergeAppMetadata(
+          this.readAppMetadata(),
+          metadataUpdate
+        );
+        this.database
+          .prepare(
+            `INSERT INTO app_metadata (key, payload)
+             VALUES ('app', ?)
+             ON CONFLICT(key) DO UPDATE SET payload = excluded.payload`
+          )
+          .run(JSON.stringify(normalizedAppMetadata));
+      }
     );
-    this.database
-      .prepare(
-        `INSERT INTO app_metadata (key, payload)
-         VALUES ('app', ?)
-         ON CONFLICT(key) DO UPDATE SET payload = excluded.payload`
-      )
-      .run(JSON.stringify(normalizedAppMetadata));
+
+    updateMetadata(update);
   }
 
   async saveRunThread(runThread: RunThread): Promise<void> {
@@ -218,10 +242,109 @@ export class SqlitePersistenceAdapter implements PersistencePort {
       );
   }
 
+  async updateCustomSatelliteInstanceValue(
+    update: CustomSatelliteValueUpdate
+  ): Promise<void> {
+    this.patchCustomSatelliteInstance(
+      update.instanceId,
+      (instance) => ({
+        ...instance,
+        data: {
+          ...instance.data,
+          [update.key]: update.value
+        },
+        updatedAt: latestTimestamp(instance.updatedAt, update.updatedAt)
+      }),
+      { cleanupReplacedImages: true }
+    );
+  }
+
+  async updateCustomSatelliteInstanceFrame(
+    update: CustomSatelliteFrameUpdate
+  ): Promise<void> {
+    this.patchCustomSatelliteInstance(update.instanceId, (instance) => ({
+      ...instance,
+      ...(update.height === undefined ? {} : { height: update.height }),
+      updatedAt: latestTimestamp(instance.updatedAt, update.updatedAt),
+      ...(update.width === undefined ? {} : { width: update.width }),
+      ...(update.x === undefined ? {} : { x: update.x }),
+      ...(update.y === undefined ? {} : { y: update.y }),
+      ...(update.z === undefined ? {} : { z: update.z })
+    }));
+  }
+
+  async updateCustomSatelliteInstanceVisibility(
+    update: CustomSatelliteVisibilityUpdate
+  ): Promise<void> {
+    this.patchCustomSatelliteInstance(update.instanceId, (instance) => ({
+      ...instance,
+      isOpen: update.isOpen,
+      updatedAt: latestTimestamp(instance.updatedAt, update.updatedAt)
+    }));
+  }
+
+  async saveCustomSatelliteImageValue(
+    input: CustomSatelliteImageInput
+  ): Promise<void> {
+    const bytes = validateCustomSatelliteImage(input.bytes, input.mimeType);
+    const saveImage = this.database.transaction(
+      (imageInput: CustomSatelliteImageInput, imageBytes: Buffer) => {
+        this.database
+          .prepare(
+            `INSERT INTO custom_satellite_images
+               (id, instance_id, property_key, mime_type, byte_length, bytes)
+             VALUES (?, ?, ?, ?, ?, ?)`
+          )
+          .run(
+            imageInput.imageId,
+            imageInput.instanceId,
+            imageInput.key,
+            imageInput.mimeType,
+            imageBytes.byteLength,
+            imageBytes
+          );
+        this.patchCustomSatelliteInstance(
+          imageInput.instanceId,
+          (instance) => ({
+            ...instance,
+            data: {
+              ...instance.data,
+              [imageInput.key]: { imageId: imageInput.imageId }
+            },
+            updatedAt: latestTimestamp(instance.updatedAt, imageInput.updatedAt)
+          }),
+          { cleanupReplacedImages: true }
+        );
+      }
+    );
+    saveImage(input, bytes);
+  }
+
+  async loadCustomSatelliteImage(
+    imageId: string
+  ): Promise<CustomSatelliteImageAsset | null> {
+    const row = this.database
+      .prepare(
+        `SELECT mime_type, bytes
+         FROM custom_satellite_images
+         WHERE id = ?`
+      )
+      .get(imageId) as ImageAssetRow | undefined;
+    return row
+      ? { bytes: new Uint8Array(row.bytes), mimeType: row.mime_type }
+      : null;
+  }
+
   async deleteCustomSatelliteInstance(instanceId: string): Promise<void> {
-    this.database
-      .prepare("DELETE FROM custom_satellite_instances WHERE id = ?")
-      .run(instanceId);
+    const remove = this.database.transaction((targetId: string) => {
+      this.database
+        .prepare("DELETE FROM custom_satellite_images WHERE instance_id = ?")
+        .run(targetId);
+      this.database
+        .prepare("DELETE FROM custom_satellite_instances WHERE id = ?")
+        .run(targetId);
+    });
+    remove(instanceId);
   }
 
   async getRun(runId: string): Promise<Run | null> {
@@ -371,6 +494,18 @@ export class SqlitePersistenceAdapter implements PersistencePort {
         payload TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS custom_satellite_images (
+        id TEXT PRIMARY KEY,
+        instance_id TEXT NOT NULL,
+        property_key TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        byte_length INTEGER NOT NULL,
+        bytes BLOB NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_custom_satellite_images_instance
+      ON custom_satellite_images (instance_id);
+
       CREATE TABLE IF NOT EXISTS app_metadata (
         key TEXT PRIMARY KEY,
         payload TEXT NOT NULL
@@ -431,6 +566,109 @@ export class SqlitePersistenceAdapter implements PersistencePort {
     }
 
     return row.project_id;
+  }
+
+  private patchCustomSatelliteInstance(
+    instanceId: string,
+    patch: (instance: CustomSatelliteInstance) => CustomSatelliteInstance,
+    options: { cleanupReplacedImages?: boolean } = {}
+  ): void {
+    const patchInstance = this.database.transaction((targetId: string) => {
+      const instance = this.readOne(
+        "custom_satellite_instances",
+        "id",
+        targetId,
+        normalizeCustomSatelliteInstance
+      );
+      if (!instance) {
+        throw new Error(`Unknown Satellite Instance: ${targetId}`);
+      }
+
+      const updated = patch(instance);
+      if (options.cleanupReplacedImages) {
+        this.deleteReplacedCustomSatelliteImages(instance, updated);
+      }
+      this.database
+        .prepare(
+          `UPDATE custom_satellite_instances
+           SET custom_type_id = ?, created_at = ?, payload = ?
+           WHERE id = ?`
+        )
+        .run(
+          updated.customTypeId,
+          updated.createdAt,
+          JSON.stringify(updated),
+          targetId
+        );
+    });
+
+    patchInstance(instanceId);
+  }
+
+  private deleteReplacedCustomSatelliteImages(
+    previous: CustomSatelliteInstance,
+    next: CustomSatelliteInstance
+  ): void {
+    const nextImageIds = new Set(
+      Object.values(next.data)
+        .map(imageIdFromValue)
+        .filter((imageId): imageId is string => imageId !== null)
+    );
+    for (const value of Object.values(previous.data)) {
+      const imageId = imageIdFromValue(value);
+      if (imageId && !nextImageIds.has(imageId)) {
+        this.database
+          .prepare("DELETE FROM custom_satellite_images WHERE id = ?")
+          .run(imageId);
+      }
+    }
+  }
+
+  private migrateEmbeddedCustomSatelliteImages(): void {
+    const rows = this.database
+      .prepare("SELECT id, payload FROM custom_satellite_instances ORDER BY id")
+      .all() as Array<{ id: string; payload: string }>;
+    const migrate = this.database.transaction(() => {
+      for (const row of rows) {
+        const instance = normalizeCustomSatelliteInstance(row.payload);
+        let changed = false;
+        const data = { ...instance.data };
+        for (const [key, value] of Object.entries(data)) {
+          const imageId = imageIdFromValue(value);
+          if (!imageId?.startsWith("data:")) continue;
+          changed = true;
+          try {
+            const parsed = parseImageDataUrl(imageId);
+            const assetId = `custom-satellite-image-${randomUUID()}`;
+            this.database
+              .prepare(
+                `INSERT INTO custom_satellite_images
+                   (id, instance_id, property_key, mime_type, byte_length, bytes)
+                 VALUES (?, ?, ?, ?, ?, ?)`
+              )
+              .run(
+                assetId,
+                instance.id,
+                key,
+                parsed.mimeType,
+                parsed.bytes.byteLength,
+                parsed.bytes
+              );
+            data[key] = { imageId: assetId };
+          } catch {
+            data[key] = null;
+          }
+        }
+        if (changed) {
+          this.database
+            .prepare(
+              "UPDATE custom_satellite_instances SET payload = ? WHERE id = ?"
+            )
+            .run(JSON.stringify({ ...instance, data }), row.id);
+        }
+      }
+    });
+    migrate();
   }
 
   private readAppMetadata(): AppMetadata {
@@ -509,8 +747,12 @@ function normalizeAppMetadata(
 
 function mergeAppMetadata(
   current: AppMetadata,
-  incoming: AppMetadata
+  incoming: AppMetadataUpdate
 ): AppMetadata {
+  const mergedSelectedProjectId =
+    incoming.selectedProjectId === undefined
+      ? current.selectedProjectId
+      : incoming.selectedProjectId;
   const mergedNotesState =
     incoming.notesState === undefined
       ? current.notesState
@@ -523,6 +765,7 @@ function mergeAppMetadata(
   return normalizeAppMetadata({
     ...current,
     ...incoming,
+    selectedProjectId: mergedSelectedProjectId,
     ...(mergedNotesState === undefined ? {} : { notesState: mergedNotesState }),
     ...(mergedAppearancePreferences === undefined
       ? {}
@@ -603,7 +846,76 @@ function normalizeCustomSatelliteType(payload: string): CustomSatelliteType {
 function normalizeCustomSatelliteInstance(
   payload: string
 ): CustomSatelliteInstance {
-  return JSON.parse(payload) as CustomSatelliteInstance;
+  const instance = JSON.parse(payload) as CustomSatelliteInstance & {
+    isOpen?: boolean;
+  };
+  return {
+    ...instance,
+    isOpen: instance.isOpen ?? true
+  };
+}
+
+function imageIdFromValue(value: SatelliteValue): string | null {
+  return typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    "imageId" in value
+    ? value.imageId
+    : null;
+}
+
+function validateCustomSatelliteImage(
+  input: Uint8Array,
+  mimeType: string
+): Buffer {
+  if (!(input instanceof Uint8Array)) {
+    throw new Error("Satellite image bytes are required.");
+  }
+  if (
+    input.byteLength === 0 ||
+    input.byteLength > MAX_CUSTOM_SATELLITE_IMAGE_BYTES
+  ) {
+    throw new Error("Satellite images must be between 1 byte and 5 MB.");
+  }
+  if (!(mimeType in CUSTOM_SATELLITE_IMAGE_SIGNATURES)) {
+    throw new Error(`Unsupported Satellite image type: ${mimeType}`);
+  }
+
+  const bytes = Buffer.from(input);
+  const signatures =
+    CUSTOM_SATELLITE_IMAGE_SIGNATURES[
+      mimeType as keyof typeof CUSTOM_SATELLITE_IMAGE_SIGNATURES
+    ];
+  const matches = signatures.some((signature) =>
+    bytes.subarray(0, signature.length).equals(signature)
+  );
+  const validWebp =
+    mimeType !== "image/webp" ||
+    (matches && bytes.subarray(8, 12).equals(Buffer.from("WEBP")));
+  if (!matches || !validWebp) {
+    throw new Error("Satellite image contents do not match the declared type.");
+  }
+  return bytes;
+}
+
+function parseImageDataUrl(value: string): {
+  bytes: Buffer;
+  mimeType: string;
+} {
+  const match = /^data:([^;,]+);base64,([a-z0-9+/=\s]+)$/i.exec(value);
+  if (!match?.[1] || !match[2]) {
+    throw new Error("Invalid embedded Satellite image.");
+  }
+  const mimeType = match[1].toLowerCase();
+  const bytes = validateCustomSatelliteImage(
+    Buffer.from(match[2], "base64"),
+    mimeType
+  );
+  return { bytes, mimeType };
+}
+
+function latestTimestamp(current: string, incoming: string): string {
+  return current.localeCompare(incoming) >= 0 ? current : incoming;
 }
 
 function normalizeThread(payload: string): Thread {

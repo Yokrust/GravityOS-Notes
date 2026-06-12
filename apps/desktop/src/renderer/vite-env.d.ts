@@ -114,18 +114,27 @@ interface Window {
       instanceId: string;
       key: string;
       value: SatelliteValueRecord;
-    }): Promise<CustomSatelliteStateRecord>;
+    }): Promise<void>;
     updateCustomSatelliteFrame(input: {
       instanceId: string;
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      z: number;
-    }): Promise<CustomSatelliteStateRecord>;
-    closeCustomSatelliteInstance(
-      instanceId: string
-    ): Promise<CustomSatelliteStateRecord>;
+      x?: number;
+      y?: number;
+      width?: number;
+      height?: number;
+      z?: number;
+    }): Promise<void>;
+    saveCustomSatelliteImage(input: {
+      bytes: Uint8Array;
+      instanceId: string;
+      key: string;
+      mimeType: string;
+    }): Promise<{ imageId: string }>;
+    loadCustomSatelliteImage(
+      imageId: string
+    ): Promise<{ bytes: Uint8Array; mimeType: string }>;
+    closeCustomSatelliteInstance(instanceId: string): Promise<void>;
+    reopenCustomSatelliteInstance(instanceId: string): Promise<void>;
+    deleteCustomSatelliteInstance(instanceId: string): Promise<void>;
   };
 }
 
@@ -141,6 +150,7 @@ type SatelliteValueTypeRecord =
   | "image";
 
 type SatelliteValueRecord =
+  | null
   | string
   | number
   | boolean
@@ -202,6 +212,7 @@ interface CustomSatelliteInstanceRecord {
   id: string;
   customTypeId: string;
   data: Record<string, SatelliteValueRecord>;
+  isOpen: boolean;
   x: number;
   y: number;
   width: number;
@@ -217,6 +228,18 @@ interface CustomSatelliteStateRecord {
 }
 
 type AppearanceSchemeRecord = "auto" | "light" | "dark";
+type AppearanceThemeRecord =
+  | "grafito"
+  | "porcelana"
+  | "cristal"
+  | "cristal-noche";
+type AppearanceAccentRecord =
+  | "violeta"
+  | "azul"
+  | "menta"
+  | "ambar"
+  | "rosa"
+  | "custom";
 
 type AppearanceHarmonyRecord =
   | "complementary"
@@ -232,11 +255,14 @@ interface AppearanceGradientPointRecord {
 }
 
 interface AppearancePreferencesRecord {
+  accent: AppearanceAccentRecord;
+  customAccent: { h: number; s: number; l: number };
   harmony: AppearanceHarmonyRecord;
   opacity: number;
   points: AppearanceGradientPointRecord[];
   rotation: number;
   scheme: AppearanceSchemeRecord;
+  theme: AppearanceThemeRecord;
   texture: number;
   version: 1;
 }

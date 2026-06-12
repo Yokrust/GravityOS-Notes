@@ -14,7 +14,6 @@ import { ThemePicker } from "../../components/ThemePicker.js";
 import { useAuthState } from "../../composition/use-auth-state.js";
 import type { AppearancePreferencesController } from "../../composition/use-appearance-preferences.js";
 import type { AppSurface } from "../../lib/app-surface.js";
-import { isCristalTheme, useAppearance } from "../../lib/appearance.js";
 
 type SettingsSectionId =
   | "api-provider"
@@ -150,8 +149,6 @@ function FeaturesSettings({
 }: {
   appearance: AppearancePreferencesController;
 }) {
-  const { setTheme, theme } = useAppearance();
-
   return (
     <div className="appearance-settings">
       {appearance.error ? (
@@ -190,19 +187,7 @@ function FeaturesSettings({
             onCommit={(preferences) => {
               void appearance.save(preferences);
             }}
-            onSchemeSelect={(scheme) => {
-              const wantsDark =
-                scheme === "dark" ||
-                (scheme === "auto" &&
-                  window.matchMedia("(prefers-color-scheme: dark)").matches);
-              // Dentro del vidrio líquido el esquema alterna entre sus dos
-              // caras (Cristal / Cristal Noche) sin abandonar el material.
-              if (isCristalTheme(theme)) {
-                setTheme(wantsDark ? "cristal-noche" : "cristal");
-              } else {
-                setTheme(wantsDark ? "grafito" : "porcelana");
-              }
-            }}
+            onSchemeSelect={appearance.selectScheme}
             value={appearance.preferences}
           />
         ) : (

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createCustomSatelliteInstance,
+  createCustomSatelliteType,
   createProject,
   createConversationThread,
   createInitialRunResult,
@@ -10,8 +12,117 @@ import {
   createThreadMessage,
   deriveThreadTitleFromPrompt,
   startRun,
+  updateCustomSatelliteInstanceValue,
   updateRunResult
 } from "../src/index.js";
+
+describe("custom satellite field semantics", () => {
+  it("uses null as the canonical unset value for optional fields", () => {
+    const { customType, instance } = createCustomSatelliteFieldContext(false);
+
+    const updated = updateCustomSatelliteInstanceValue({
+      customType,
+      instance,
+      key: "value",
+      now: "2026-06-12T12:01:00.000Z",
+      value: null
+    });
+
+    expect(updated.data).toEqual({ value: null });
+  });
+
+  it("rejects null for required fields", () => {
+    const { customType, instance } = createCustomSatelliteFieldContext(true);
+
+    expect(() =>
+      updateCustomSatelliteInstanceValue({
+        customType,
+        instance,
+        key: "value",
+        now: "2026-06-12T12:01:00.000Z",
+        value: null
+      })
+    ).toThrow("Required Satellite property is unset: value");
+  });
+
+  it.each([
+    ["shortText", ""],
+    ["longText", "   "],
+    ["number", null],
+    ["date", ""],
+    ["singleSelect", ""],
+    ["multiSelect", []],
+    ["checkbox", null],
+    ["progress", null],
+    ["image", { imageId: " " }]
+  ] as const)(
+    "normalizes an empty optional %s field to null",
+    (valueType, value) => {
+      const { customType, instance } = createCustomSatelliteFieldContext(
+        false,
+        valueType
+      );
+
+      expect(
+        updateCustomSatelliteInstanceValue({
+          customType,
+          instance,
+          key: "value",
+          now: "2026-06-12T12:01:00.000Z",
+          value
+        }).data
+      ).toEqual({ value: null });
+    }
+  );
+
+  it.each([
+    "shortText",
+    "longText",
+    "number",
+    "date",
+    "singleSelect",
+    "multiSelect",
+    "checkbox",
+    "progress",
+    "image"
+  ] as const)("rejects an unset required %s field", (valueType) => {
+    const { customType, instance } = createCustomSatelliteFieldContext(
+      true,
+      valueType
+    );
+
+    expect(() =>
+      updateCustomSatelliteInstanceValue({
+        customType,
+        instance,
+        key: "value",
+        now: "2026-06-12T12:01:00.000Z",
+        value: null
+      })
+    ).toThrow("Required Satellite property is unset: value");
+  });
+
+  it.each([
+    ["number", 0],
+    ["progress", 0],
+    ["checkbox", false]
+  ] as const)("keeps %s zero-like values as valid data", (valueType, value) => {
+    const { customType, instance } = createCustomSatelliteFieldContext(
+      true,
+      valueType
+    );
+
+    expect(
+      updateCustomSatelliteInstanceValue({
+        customType,
+        instance,
+        key: "value",
+        now: "2026-06-12T12:01:00.000Z",
+        value
+      }).data
+    ).toEqual({ value });
+  });
+});
 
 describe("domain bootstrap", () => {
   it("creates a folder system without requiring role assignments", () => {
@@ -129,3 +240,54 @@ describe("domain bootstrap", () => {
     ).toBe("Explain the product direction for the n...");
   });
 });
+
+function createCustomSatelliteFieldContext(
+  required: boolean,
+  valueType:
+    | "shortText"
+    | "longText"
+    | "number"
+    | "date"
+    | "singleSelect"
+    | "multiSelect"
+    | "checkbox"
+    | "progress"
+    | "image" = "number"
+) {
+  let sequence = 0;
+  const ids = {
+    next(prefix: string) {
+      sequence += 1;
+      return `${prefix}-${sequence}`;
+    }
+  };
+  const customType = createCustomSatelliteType({
+    id: "type-1",
+    ids,
+    now: "2026-06-12T12:00:00.000Z",
+    proposal: {
+      appearance: "card",
+      color: "sky",
+      icon: "list-checks",
+      name: "Field semantics",
+      properties: [
+        {
+          key: "value",
+          label: "Value",
+          ...(valueType === "singleSelect" || valueType === "multiSelect"
+            ? { options: ["One", "Two"] }
+            : {}),
+          required,
+          valueType
+        }
+      ]
+    }
+  });
+  const instance = createCustomSatelliteInstance({
+    customType,
+    id: "instance-1",
+    now: "2026-06-12T12:00:00.000Z"
+  });
+
+  return { customType, instance };
+}

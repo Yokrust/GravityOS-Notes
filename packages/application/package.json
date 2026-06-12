@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./appearance": {
+      "types": "./dist/services/appearance/appearance-preferences-service.d.ts",
+      "default": "./dist/services/appearance/appearance-preferences-service.js"
     }
   },
   "dependencies": {

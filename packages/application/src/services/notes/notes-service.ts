@@ -211,9 +211,7 @@ export class NotesService {
   }
 
   private async savePreferences(state: PersistedNotesState): Promise<void> {
-    const persistedState = await this.persistence.loadState();
-    await this.persistence.saveAppMetadata({
-      ...persistedState.appMetadata,
+    await this.persistence.updateAppMetadata({
       notesState: {
         activeNoteId: state.activeNoteId,
         expandedFolders: { ...state.expandedFolders },

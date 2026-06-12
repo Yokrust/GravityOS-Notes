@@ -55,8 +55,16 @@ A small, self-contained productivity widget the user can summon as a floating ov
 _Avoid_: Agent, folder node, trace overlay, separate Electron window, full application, always-on-top pinning
 
 **Satellite Type**:
-A built-in kind of satellite Gravity ships, such as Quick Note, Calendar, or Pomodoro. Each type defines its own backing data shape. The catalog of available types is fixed by Gravity.
-_Avoid_: User template, custom widget, third-party plugin
+A kind of satellite available in Gravity. Built-in types such as Quick Note, Calendar, and Pomodoro have Gravity-owned behavior; a Custom Satellite Type is user-defined and has a generated field schema.
+_Avoid_: Satellite Instance, third-party plugin
+
+**Custom Satellite Type**:
+A user-defined Satellite Type with a persisted name, appearance, and field schema. One type can have multiple Custom Satellite Instances.
+_Avoid_: Built-in Satellite Type, Satellite Instance, temporary template
+
+**Custom Satellite Instance**:
+A persisted occurrence of a Custom Satellite Type with its own field values, visibility, position, size, and stack order.
+_Avoid_: Custom Satellite Type, transient window, built-in Satellite
 
 **Note**:
 A persisted rich-text entry managed by the Quick Note satellite. Each **Note** has a user-editable title, rich-text content, and the moments it was created, last edited, and last opened.
@@ -107,8 +115,12 @@ The top-bar menu in Gravity that lists every **Satellite Type** and acts as the 
 _Avoid_: Sidebar, separate panel, settings dialog
 
 **Satellite State**:
-The persisted, type-specific data Gravity stores for a satellite between sessions. Distinct from a satellite's on-screen position, which is not persisted.
-_Avoid_: Window position, layout snapshot, ephemeral UI state
+The persisted, type-specific data Gravity stores for a satellite between sessions. Custom Satellite State includes field values, visibility, position, size, and stack order.
+_Avoid_: Ephemeral hover state, temporary drag state
+
+**App Surface**:
+One of Gravity's primary full-window surfaces selected from the top bar — **Notes**, **Threads**, or **Settings**. Notes and Threads are content surfaces; **Settings** is a temporary surface layered over whichever content surface was active and returns to it when dismissed.
+_Avoid_: Modal dialog, route history stack, multi-pane split
 
 ## Responsibility
 
@@ -139,9 +151,13 @@ _Avoid_: Window position, layout snapshot, ephemeral UI state
 - Quick Note allows multiple simultaneous floating windows.
 - Pomodoro and Calendar are singleton floating windows.
 - Closing a satellite window hides its UI but does not necessarily stop background behavior.
+- Closing a Custom Satellite Instance preserves its state and geometry so it can be reopened.
+- Permanently deleting a Custom Satellite Instance requires a separate explicit action.
+- Custom Satellite Types are user-defined; built-in Satellite Types remain fixed by Gravity.
 - A running Pomodoro continues in the background and emits a toast notification with sound when a phase ends.
 - A **Reminder** can fire whether or not the Calendar window is open.
-- **Satellite State** persists across Gravity restarts, but satellite window position does not.
+- **Satellite State** persists across Gravity restarts. Custom Satellite geometry is persisted; built-in Satellite window position is currently ephemeral.
+- Opening **Settings** remembers the active content surface; closing **Settings** returns to that surface (**Notes** or **Threads**), not always **Notes**.
 
 ## Ambiguities
 
@@ -154,7 +170,7 @@ _Avoid_: Window position, layout snapshot, ephemeral UI state
 - A **Project Group** is a container for navigation, not a selectable thread.
 - When a **Note** is the current note of one Quick Note window, it should appear as a ghost in the note list of another Quick Note window.
 - The **Hub Activity Indicator** reflects live background activity, not unread counts.
-- **Satellite State** is persisted data, not a layout snapshot.
+- Custom Satellite geometry is persisted as part of its instance state; temporary drag state is not.
 
 ## Process Areas
 

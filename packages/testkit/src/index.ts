@@ -2,6 +2,7 @@ import type {
   AuthPort,
   AuthState,
   AppMetadata,
+  AppMetadataUpdate,
   ClockPort,
   FilesystemPort,
   IdGeneratorPort,
@@ -11,10 +12,12 @@ import type {
 } from "@gravity/application";
 import type {
   AgentActivityItem,
+  CustomSatelliteInstance,
   Project,
   Run,
   RunResult,
   RunThread,
+  SatelliteValue,
   Thread,
   ThreadMessage
 } from "@gravity/domain";
@@ -211,13 +214,24 @@ export function createInMemoryPersistence(
       instance
     ])
   );
+  const customSatelliteImages = new Map<
+    string,
+    { bytes: Uint8Array; instanceId: string; mimeType: string }
+  >();
   const initialNotesState = initialState?.appMetadata?.notesState;
+  const initialAppearancePreferences =
+    initialState?.appMetadata?.appearancePreferences;
   let appMetadata: AppMetadata = {
     selectedProjectId: initialState?.appMetadata?.selectedProjectId ?? null
   };
 
   if (initialNotesState !== undefined) {
     appMetadata.notesState = cloneNotesState(initialNotesState);
+  }
+  if (initialAppearancePreferences !== undefined) {
+    appMetadata.appearancePreferences = cloneAppearancePreferences(
+      initialAppearancePreferences
+    );
   }
 
   for (const run of initialState?.runs ?? []) {
@@ -267,16 +281,26 @@ export function createInMemoryPersistence(
         projectsById.set(project.id, project);
       }
     },
-    async saveAppMetadata(nextAppMetadata) {
+    async updateAppMetadata(update) {
       const nextNotesState =
-        nextAppMetadata.notesState === undefined
+        update.notesState === undefined
           ? appMetadata.notesState
-          : cloneNotesState(nextAppMetadata.notesState);
+          : cloneNotesState(update.notesState);
+      const nextAppearancePreferences =
+        update.appearancePreferences === undefined
+          ? appMetadata.appearancePreferences
+          : cloneAppearancePreferences(update.appearancePreferences);
 
       appMetadata = {
         ...appMetadata,
-        selectedProjectId: nextAppMetadata.selectedProjectId ?? null,
-        ...(nextNotesState === undefined ? {} : { notesState: nextNotesState })
+        selectedProjectId:
+          update.selectedProjectId === undefined
+            ? appMetadata.selectedProjectId
+            : update.selectedProjectId,
+        ...(nextNotesState === undefined ? {} : { notesState: nextNotesState }),
+        ...(nextAppearancePreferences === undefined
+          ? {}
+          : { appearancePreferences: nextAppearancePreferences })
       };
     },
     async saveRunThread(runThread) {
@@ -300,8 +324,92 @@ export function createInMemoryPersistence(
     async saveCustomSatelliteInstance(instance) {
       customSatelliteInstances.set(instance.id, instance);
     },
+    async updateCustomSatelliteInstanceValue(update) {
+      const instance = requireCustomSatelliteInstance(
+        customSatelliteInstances,
+        update.instanceId
+      );
+      customSatelliteInstances.set(instance.id, {
+        ...instance,
+        data: {
+          ...instance.data,
+          [update.key]: cloneSatelliteValue(update.value)
+        },
+        updatedAt: latestTimestamp(instance.updatedAt, update.updatedAt)
+      });
+      deleteUnreferencedCustomSatelliteImages(
+        customSatelliteImages,
+        instance.id,
+        customSatelliteInstances.get(instance.id)!
+      );
+    },
+    async updateCustomSatelliteInstanceFrame(update) {
+      const instance = requireCustomSatelliteInstance(
+        customSatelliteInstances,
+        update.instanceId
+      );
+      customSatelliteInstances.set(instance.id, {
+        ...instance,
+        ...(update.height === undefined ? {} : { height: update.height }),
+        updatedAt: latestTimestamp(instance.updatedAt, update.updatedAt),
+        ...(update.width === undefined ? {} : { width: update.width }),
+        ...(update.x === undefined ? {} : { x: update.x }),
+        ...(update.y === undefined ? {} : { y: update.y }),
+        ...(update.z === undefined ? {} : { z: update.z })
+      });
+    },
+    async updateCustomSatelliteInstanceVisibility(update) {
+      const instance = requireCustomSatelliteInstance(
+        customSatelliteInstances,
+        update.instanceId
+      );
+      customSatelliteInstances.set(instance.id, {
+        ...instance,
+        isOpen: update.isOpen,
+        updatedAt: latestTimestamp(instance.updatedAt, update.updatedAt)
+      });
+    },
+    async saveCustomSatelliteImageValue(input) {
+      const instance = requireCustomSatelliteInstance(
+        customSatelliteInstances,
+        input.instanceId
+      );
+      customSatelliteImages.set(input.imageId, {
+        bytes: new Uint8Array(input.bytes),
+        instanceId: instance.id,
+        mimeType: input.mimeType
+      });
+      const updated = {
+        ...instance,
+        data: {
+          ...instance.data,
+          [input.key]: { imageId: input.imageId }
+        },
+        updatedAt: latestTimestamp(instance.updatedAt, input.updatedAt)
+      };
+      customSatelliteInstances.set(instance.id, updated);
+      deleteUnreferencedCustomSatelliteImages(
+        customSatelliteImages,
+        instance.id,
+        updated
+      );
+    },
+    async loadCustomSatelliteImage(imageId) {
+      const image = customSatelliteImages.get(imageId);
+      return image
+        ? {
+            bytes: new Uint8Array(image.bytes),
+            mimeType: image.mimeType
+          }
+        : null;
+    },
     async deleteCustomSatelliteInstance(instanceId) {
       customSatelliteInstances.delete(instanceId);
+      for (const [imageId, image] of customSatelliteImages) {
+        if (image.instanceId === instanceId) {
+          customSatelliteImages.delete(imageId);
+        }
+      }
     },
     async getRun(runId) {
       return runs.get(runId) ?? null;
@@ -368,6 +476,59 @@ export function createInMemoryPersistence(
   };
 }
 
+function requireCustomSatelliteInstance(
+  instances: Map<string, CustomSatelliteInstance>,
+  instanceId: string
+) {
+  const instance = instances.get(instanceId);
+  if (!instance) {
+    throw new Error(`Unknown Satellite Instance: ${instanceId}`);
+  }
+  return instance;
+}
+
+function cloneSatelliteValue(value: SatelliteValue): SatelliteValue {
+  if (value === null) {
+    return null;
+  }
+  if (Array.isArray(value)) {
+    return [...value];
+  }
+  if (typeof value === "object") {
+    return { ...value };
+  }
+  return value;
+}
+
+function deleteUnreferencedCustomSatelliteImages(
+  images: Map<
+    string,
+    { bytes: Uint8Array; instanceId: string; mimeType: string }
+  >,
+  instanceId: string,
+  instance: CustomSatelliteInstance
+): void {
+  const referenced = new Set(
+    Object.values(instance.data).flatMap((value) =>
+      typeof value === "object" &&
+      value !== null &&
+      !Array.isArray(value) &&
+      "imageId" in value
+        ? [value.imageId]
+        : []
+    )
+  );
+  for (const [imageId, image] of images) {
+    if (image.instanceId === instanceId && !referenced.has(imageId)) {
+      images.delete(imageId);
+    }
+  }
+}
+
+function latestTimestamp(current: string, incoming: string): string {
+  return current.localeCompare(incoming) >= 0 ? current : incoming;
+}
+
 function cloneNotesState(
   state: AppMetadata["notesState"]
 ): Exclude<AppMetadata["notesState"], undefined> {
@@ -379,6 +540,20 @@ function cloneNotesState(
     activeNoteId: state.activeNoteId ?? null,
     expandedFolders: { ...state.expandedFolders },
     notebookRoot: state.notebookRoot ?? null
+  };
+}
+
+function cloneAppearancePreferences(
+  preferences: AppMetadataUpdate["appearancePreferences"]
+): Exclude<AppMetadataUpdate["appearancePreferences"], undefined> {
+  if (!preferences) {
+    return null;
+  }
+
+  return {
+    ...preferences,
+    customAccent: { ...preferences.customAccent },
+    points: preferences.points.map((point) => ({ ...point }))
   };
 }
 

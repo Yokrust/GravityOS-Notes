@@ -39,6 +39,7 @@ export const CUSTOM_SATELLITE_COLORS = [
 export type CustomSatelliteColor = (typeof CUSTOM_SATELLITE_COLORS)[number];
 
 export type SatelliteValue =
+  | null
   | string
   | number
   | boolean
@@ -83,6 +84,7 @@ export interface CustomSatelliteInstance {
   id: string;
   customTypeId: string;
   data: Record<string, SatelliteValue>;
+  isOpen: boolean;
   x: number;
   y: number;
   width: number;
@@ -237,6 +239,7 @@ export function createCustomSatelliteInstance(input: {
     id: requireIdentifier(input.id, "Satellite Instance id"),
     customTypeId: input.customType.id,
     data,
+    isOpen: true,
     x: input.position?.x ?? 24,
     y: input.position?.y ?? 24,
     width: 320,
@@ -283,6 +286,13 @@ export function validateSatelliteValue(
   property: CustomSatellitePropertyProposal,
   value: SatelliteValue
 ): SatelliteValue {
+  if (isUnsetSatelliteValue(property, value)) {
+    if (property.required) {
+      throw new Error(`Required Satellite property is unset: ${property.key}`);
+    }
+    return null;
+  }
+
   switch (property.valueType) {
     case "shortText":
     case "longText":
@@ -420,6 +430,9 @@ function requireIdentifier(value: string, label: string): string {
 }
 
 function cloneSatelliteValue(value: SatelliteValue): SatelliteValue {
+  if (value === null) {
+    return null;
+  }
   if (Array.isArray(value)) {
     return [...value];
   }
@@ -427,6 +440,38 @@ function cloneSatelliteValue(value: SatelliteValue): SatelliteValue {
     return { ...value };
   }
   return value;
+}
+
+function isUnsetSatelliteValue(
+  property: CustomSatellitePropertyProposal,
+  value: SatelliteValue
+): boolean {
+  if (value === null) {
+    return true;
+  }
+
+  switch (property.valueType) {
+    case "shortText":
+    case "longText":
+    case "date":
+    case "singleSelect":
+      return typeof value === "string" && !value.trim();
+    case "multiSelect":
+      return Array.isArray(value) && value.length === 0;
+    case "image":
+      return (
+        typeof value === "object" &&
+        value !== null &&
+        !Array.isArray(value) &&
+        "imageId" in value &&
+        typeof value.imageId === "string" &&
+        !value.imageId.trim()
+      );
+    case "number":
+    case "progress":
+    case "checkbox":
+      return false;
+  }
 }
 
 function invalidValue(key: string): Error {

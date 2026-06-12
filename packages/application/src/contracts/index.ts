@@ -25,6 +25,43 @@ export interface PathDetails {
   status: ProjectPathStatus;
 }
 
+export interface CustomSatelliteValueUpdate {
+  instanceId: string;
+  key: string;
+  updatedAt: string;
+  value: SatelliteValue;
+}
+
+export interface CustomSatelliteFrameUpdate {
+  height?: number;
+  instanceId: string;
+  updatedAt: string;
+  width?: number;
+  x?: number;
+  y?: number;
+  z?: number;
+}
+
+export interface CustomSatelliteVisibilityUpdate {
+  instanceId: string;
+  isOpen: boolean;
+  updatedAt: string;
+}
+
+export interface CustomSatelliteImageInput {
+  bytes: Uint8Array;
+  imageId: string;
+  instanceId: string;
+  key: string;
+  mimeType: string;
+  updatedAt: string;
+}
+
+export interface CustomSatelliteImageAsset {
+  bytes: Uint8Array;
+  mimeType: string;
+}
+
 export interface FilesystemPort {
   baseName(path: string): string;
   deletePath(path: string, options?: { recursive?: boolean }): Promise<void>;
@@ -44,7 +81,7 @@ export interface FilesystemPort {
 export interface PersistencePort {
   loadState(): Promise<PersistedAppState>;
   saveProjects(projects: Project[]): Promise<void>;
-  saveAppMetadata(appMetadata: AppMetadata): Promise<void>;
+  updateAppMetadata(update: AppMetadataUpdate): Promise<void>;
   saveRunThread(runThread: RunThread): Promise<void>;
   saveThreadMessage(message: ThreadMessage): Promise<void>;
   saveRun(run: Run): Promise<void>;
@@ -52,6 +89,21 @@ export interface PersistencePort {
   saveAgentActivityItem(activityItem: AgentActivityItem): Promise<void>;
   saveCustomSatelliteType(customType: CustomSatelliteType): Promise<void>;
   saveCustomSatelliteInstance(instance: CustomSatelliteInstance): Promise<void>;
+  updateCustomSatelliteInstanceValue(
+    update: CustomSatelliteValueUpdate
+  ): Promise<void>;
+  updateCustomSatelliteInstanceFrame(
+    update: CustomSatelliteFrameUpdate
+  ): Promise<void>;
+  updateCustomSatelliteInstanceVisibility(
+    update: CustomSatelliteVisibilityUpdate
+  ): Promise<void>;
+  saveCustomSatelliteImageValue(
+    input: CustomSatelliteImageInput
+  ): Promise<void>;
+  loadCustomSatelliteImage(
+    imageId: string
+  ): Promise<CustomSatelliteImageAsset | null>;
   deleteCustomSatelliteInstance(instanceId: string): Promise<void>;
   getRun(runId: string): Promise<Run | null>;
   deleteThreadData(threadId: string): Promise<void>;
@@ -70,6 +122,24 @@ export interface CustomSatelliteGeneratorPort {
 export type CustomSatelliteValueInput = SatelliteValue;
 
 export type AppearanceScheme = "auto" | "light" | "dark";
+export type AppearanceTheme =
+  | "grafito"
+  | "porcelana"
+  | "cristal"
+  | "cristal-noche";
+export type AppearancePresetAccent =
+  | "violeta"
+  | "azul"
+  | "menta"
+  | "ambar"
+  | "rosa";
+export type AppearanceAccent = AppearancePresetAccent | "custom";
+
+export interface AppearanceCustomAccent {
+  h: number;
+  s: number;
+  l: number;
+}
 
 export type AppearanceHarmony =
   | "complementary"
@@ -85,11 +155,14 @@ export interface AppearanceGradientPoint {
 }
 
 export interface AppearancePreferences {
+  accent: AppearanceAccent;
+  customAccent: AppearanceCustomAccent;
   harmony: AppearanceHarmony;
   opacity: number;
   points: AppearanceGradientPoint[];
   rotation: number;
   scheme: AppearanceScheme;
+  theme: AppearanceTheme;
   texture: number;
   version: 1;
 }
@@ -131,6 +204,12 @@ export interface NotesNavigationState {
 
 export interface AppMetadata {
   selectedProjectId: string | null;
+  notesState?: PersistedNotesState | null;
+  appearancePreferences?: AppearancePreferences | null;
+}
+
+export interface AppMetadataUpdate {
+  selectedProjectId?: string | null;
   notesState?: PersistedNotesState | null;
   appearancePreferences?: AppearancePreferences | null;
 }

@@ -7,20 +7,25 @@ import { Pipette, SwatchBook } from "lucide-react";
 import { ACCENTS, THEMES, useAppearance } from "../lib/appearance.js";
 import { hslToRgb, rgbToHex, rgbToHsl } from "../lib/ambient.js";
 
-/** El selector nativo da/recibe hex; el acento vive como matiz+saturación. */
-function customAccentHex(h: number, s: number): string {
-  return rgbToHex(hslToRgb(h / 360, s / 100, 0.55));
+/** El selector nativo da/recibe hex; el acento conserva matiz, saturación y
+ *  luminosidad para reproducir exactamente el color elegido. */
+function customAccentHex(h: number, s: number, l: number): string {
+  return rgbToHex(hslToRgb(h / 360, s / 100, l / 100));
 }
 
-function hexToCustomAccent(hex: string): { h: number; s: number } {
+function hexToCustomAccent(hex: string): { h: number; s: number; l: number } {
   const value = hex.replace("#", "");
   const rgb: [number, number, number] = [
     Number.parseInt(value.slice(0, 2), 16),
     Number.parseInt(value.slice(2, 4), 16),
     Number.parseInt(value.slice(4, 6), 16)
   ];
-  const [h, s] = rgbToHsl(rgb[0], rgb[1], rgb[2]);
-  return { h: Math.round(h), s: Math.round(s * 100) };
+  const [h, s, l] = rgbToHsl(rgb[0], rgb[1], rgb[2]);
+  return {
+    h: Math.round(((h % 360) + 360) % 360),
+    s: Math.round(s * 100),
+    l: Math.round(l * 100)
+  };
 }
 
 export function AppearanceMenu() {
@@ -130,7 +135,8 @@ export function AppearanceMenu() {
                 style={
                   {
                     "--swatch-h": customAccent.h,
-                    "--swatch-s": `${customAccent.s}%`
+                    "--swatch-s": `${customAccent.s}%`,
+                    "--swatch-l": `${customAccent.l}%`
                   } as React.CSSProperties
                 }
                 title="Acento personalizado"
@@ -143,7 +149,11 @@ export function AppearanceMenu() {
                     setCustomAccent(hexToCustomAccent(event.target.value))
                   }
                   type="color"
-                  value={customAccentHex(customAccent.h, customAccent.s)}
+                  value={customAccentHex(
+                    customAccent.h,
+                    customAccent.s,
+                    customAccent.l
+                  )}
                 />
               </label>
             </div>

@@ -16,6 +16,8 @@ import {
   CustomSatelliteIcon
 } from "@/lib/satellite-visuals";
 import { SatelliteCreator } from "./SatelliteCreator";
+import { CustomSatelliteErrorNotice } from "./CustomSatelliteErrorNotice";
+import { findClosedCustomSatelliteInstance } from "@/lib/custom-satellite-lifecycle";
 
 interface SatelliteMeta {
   kind: BuiltInSatelliteKind;
@@ -73,8 +75,12 @@ export function SatelliteHubButton() {
     focusSatellite,
     satellites,
     customSatelliteTypes,
+    customSatelliteInstances,
+    reopenCustomSatellite,
     pomodoroTimer,
-    reminders
+    reminders,
+    customSatelliteError,
+    clearCustomSatelliteError
   } = useStore();
   const [drag, setDrag] = useState<DragState | null>(null);
   const [creatorOpen, setCreatorOpen] = useState(false);
@@ -208,6 +214,19 @@ export function SatelliteHubButton() {
           ))}
         </span>
       </motion.button>
+      {customSatelliteError &&
+      !satellites.some(
+        (satellite) =>
+          satellite.kind === "custom" &&
+          satellite.id === customSatelliteError.instanceId
+      ) ? (
+        <div className="custom-satellite-hub-error">
+          <CustomSatelliteErrorNotice
+            message={customSatelliteError.message}
+            onDismiss={clearCustomSatelliteError}
+          />
+        </div>
+      ) : null}
 
       <AnimatePresence>
         {hubOpen && (
@@ -303,6 +322,10 @@ export function SatelliteHubButton() {
                 ) : (
                   customSatelliteTypes.map((customType, index) => {
                     const palette = CUSTOM_SATELLITE_COLORS[customType.color];
+                    const closedInstance = findClosedCustomSatelliteInstance(
+                      customSatelliteInstances,
+                      customType.id
+                    );
                     return (
                       <motion.button
                         key={customType.id}
@@ -315,8 +338,23 @@ export function SatelliteHubButton() {
                         }}
                         whileHover={{ x: 2 }}
                         whileTap={{ scale: 0.98 }}
-                        onPointerDown={(e) => startCustomDrag(e, customType)}
-                        className="group flex w-full cursor-grab touch-none select-none items-center gap-3 rounded-xl px-2.5 py-2 transition hover:bg-[color:var(--accent-soft)] active:cursor-grabbing"
+                        onClick={
+                          closedInstance
+                            ? () => {
+                                void reopenCustomSatellite(closedInstance.id);
+                              }
+                            : undefined
+                        }
+                        onPointerDown={
+                          closedInstance
+                            ? undefined
+                            : (e) => startCustomDrag(e, customType)
+                        }
+                        className={`group flex w-full touch-none select-none items-center gap-3 rounded-xl px-2.5 py-2 transition hover:bg-[color:var(--accent-soft)] ${
+                          closedInstance
+                            ? "cursor-pointer"
+                            : "cursor-grab active:cursor-grabbing"
+                        }`}
                       >
                         <span
                           className="grid h-9 w-9 place-items-center rounded-xl border border-[color:var(--line)]"
@@ -332,11 +370,13 @@ export function SatelliteHubButton() {
                             {customType.name}
                           </span>
                           <span className="text-[11.5px] text-[color:var(--faint)] font-mono">
-                            {customType.properties.length} campos
+                            {closedInstance
+                              ? "cerrado · reabrir"
+                              : `${customType.properties.length} campos`}
                           </span>
                         </span>
                         <span className="ml-auto font-mono text-[10.5px] text-[color:var(--faint)] opacity-0 transition group-hover:opacity-100">
-                          drag →
+                          {closedInstance ? "abrir →" : "drag →"}
                         </span>
                       </motion.button>
                     );

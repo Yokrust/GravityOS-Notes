@@ -288,6 +288,7 @@ type SatelliteValueType =
   | "image";
 
 type SatelliteValue =
+  | null
   | string
   | number
   | boolean
@@ -329,6 +330,7 @@ interface CustomSatelliteInstance {
   id: string;
   customTypeId: string;
   data: Record<string, SatelliteValue>;
+  isOpen: boolean;
   x: number;
   y: number;
   width: number;
@@ -344,6 +346,8 @@ interface CustomSatelliteState {
 }
 
 interface AppearancePreferences {
+  accent: "violeta" | "azul" | "menta" | "ambar" | "rosa" | "custom";
+  customAccent: { h: number; s: number; l: number };
   harmony:
     | "complementary"
     | "singleAnalogous"
@@ -355,6 +359,7 @@ interface AppearancePreferences {
   points: Array<{ x: number; y: number }>;
   rotation: number;
   scheme: "auto" | "light" | "dark";
+  theme: "grafito" | "porcelana" | "cristal" | "cristal-noche";
   texture: number;
   version: 1;
 }
@@ -499,24 +504,48 @@ contextBridge.exposeInMainWorld("gravity", {
     ipcRenderer.invoke(
       "custom-satellites:update-value",
       input
-    ) as Promise<CustomSatelliteState>,
+    ) as Promise<void>,
   updateCustomSatelliteFrame: async (input: {
     instanceId: string;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    z: number;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    z?: number;
   }) =>
     ipcRenderer.invoke(
       "custom-satellites:update-frame",
       input
-    ) as Promise<CustomSatelliteState>,
+    ) as Promise<void>,
+  saveCustomSatelliteImage: async (input: {
+    bytes: Uint8Array;
+    instanceId: string;
+    key: string;
+    mimeType: string;
+  }) =>
+    ipcRenderer.invoke("custom-satellites:save-image", input) as Promise<{
+      imageId: string;
+    }>,
+  loadCustomSatelliteImage: async (imageId: string) =>
+    ipcRenderer.invoke("custom-satellites:load-image", imageId) as Promise<{
+      bytes: Uint8Array;
+      mimeType: string;
+    }>,
   closeCustomSatelliteInstance: async (instanceId: string) =>
     ipcRenderer.invoke(
       "custom-satellites:close-instance",
       instanceId
-    ) as Promise<CustomSatelliteState>,
+    ) as Promise<void>,
+  reopenCustomSatelliteInstance: async (instanceId: string) =>
+    ipcRenderer.invoke(
+      "custom-satellites:reopen-instance",
+      instanceId
+    ) as Promise<void>,
+  deleteCustomSatelliteInstance: async (instanceId: string) =>
+    ipcRenderer.invoke(
+      "custom-satellites:delete-instance",
+      instanceId
+    ) as Promise<void>,
   getAuthState: async () =>
     ipcRenderer.invoke("auth:get-state") as Promise<AuthStateRecord>,
   saveProviderApiKey: async (providerId: string, apiKey: string) =>
