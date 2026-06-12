@@ -914,20 +914,27 @@ function SlashMenu({
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!filtered.length) return;
+      // The menu owns these keys while open: stop propagation so the underlying
+      // contentEditable block doesn't also handle Enter (inserting a block) or
+      // the arrows (moving the caret/focus) at the same time.
       if (event.key === "ArrowDown") {
         event.preventDefault();
+        event.stopPropagation();
         setActiveIndex((current) => (current + 1) % filtered.length);
       } else if (event.key === "ArrowUp") {
         event.preventDefault();
+        event.stopPropagation();
         setActiveIndex(
           (current) => (current - 1 + filtered.length) % filtered.length
         );
-      } else if (event.key === "Enter") {
+      } else if (event.key === "Enter" || event.key === "Tab") {
         event.preventDefault();
+        event.stopPropagation();
         const activeOption = filtered[activeIndex];
         if (activeOption) onSelect(activeOption);
       } else if (event.key === "Escape") {
         event.preventDefault();
+        event.stopPropagation();
         onClose();
       }
     };
