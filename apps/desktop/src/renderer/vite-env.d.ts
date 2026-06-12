@@ -93,7 +93,152 @@ interface Window {
       prompt: string
     ): Promise<RunPanelState>;
     stopRun(projectId: string, runId: string): Promise<RunPanelState>;
+    getAppearancePreferences(): Promise<AppearancePreferencesRecord>;
+    saveAppearancePreferences(
+      preferences: AppearancePreferencesRecord
+    ): Promise<AppearancePreferencesRecord>;
+    getCustomSatelliteState(): Promise<CustomSatelliteStateRecord>;
+    generateCustomSatellite(
+      description: string
+    ): Promise<CustomSatelliteProposalRecord>;
+    confirmCustomSatellite(
+      proposal: CustomSatelliteProposalRecord
+    ): Promise<CustomSatelliteStateRecord>;
+    createCustomSatelliteInstance(input: {
+      customTypeId: string;
+      x?: number;
+      y?: number;
+      z?: number;
+    }): Promise<CustomSatelliteStateRecord>;
+    updateCustomSatelliteValue(input: {
+      instanceId: string;
+      key: string;
+      value: SatelliteValueRecord;
+    }): Promise<CustomSatelliteStateRecord>;
+    updateCustomSatelliteFrame(input: {
+      instanceId: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      z: number;
+    }): Promise<CustomSatelliteStateRecord>;
+    closeCustomSatelliteInstance(
+      instanceId: string
+    ): Promise<CustomSatelliteStateRecord>;
   };
+}
+
+type SatelliteValueTypeRecord =
+  | "shortText"
+  | "longText"
+  | "number"
+  | "date"
+  | "singleSelect"
+  | "multiSelect"
+  | "checkbox"
+  | "progress"
+  | "image";
+
+type SatelliteValueRecord =
+  | string
+  | number
+  | boolean
+  | string[]
+  | { imageId: string };
+
+type CustomSatelliteIconRecord =
+  | "sparkles"
+  | "list-checks"
+  | "user-round"
+  | "briefcase"
+  | "book-open"
+  | "shirt"
+  | "heart"
+  | "star"
+  | "calendar-days"
+  | "image";
+
+type CustomSatelliteColorRecord =
+  | "slate"
+  | "amber"
+  | "rose"
+  | "sky"
+  | "emerald"
+  | "violet";
+
+interface CustomSatellitePropertyRecord {
+  id: string;
+  key: string;
+  label: string;
+  valueType: SatelliteValueTypeRecord;
+  required: boolean;
+  options?: string[];
+  defaultValue?: SatelliteValueRecord;
+}
+
+interface CustomSatelliteProposalRecord {
+  name: string;
+  description?: string;
+  icon: CustomSatelliteIconRecord;
+  color: CustomSatelliteColorRecord;
+  appearance: "card";
+  properties: Array<Omit<CustomSatellitePropertyRecord, "id">>;
+}
+
+interface CustomSatelliteTypeRecord {
+  id: string;
+  name: string;
+  description?: string;
+  icon: CustomSatelliteIconRecord;
+  color: CustomSatelliteColorRecord;
+  appearance: "card";
+  properties: CustomSatellitePropertyRecord[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface CustomSatelliteInstanceRecord {
+  id: string;
+  customTypeId: string;
+  data: Record<string, SatelliteValueRecord>;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  z: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface CustomSatelliteStateRecord {
+  customTypes: CustomSatelliteTypeRecord[];
+  instances: CustomSatelliteInstanceRecord[];
+}
+
+type AppearanceSchemeRecord = "auto" | "light" | "dark";
+
+type AppearanceHarmonyRecord =
+  | "complementary"
+  | "singleAnalogous"
+  | "splitComplementary"
+  | "analogous"
+  | "triadic"
+  | "floating";
+
+interface AppearanceGradientPointRecord {
+  x: number;
+  y: number;
+}
+
+interface AppearancePreferencesRecord {
+  harmony: AppearanceHarmonyRecord;
+  opacity: number;
+  points: AppearanceGradientPointRecord[];
+  rotation: number;
+  scheme: AppearanceSchemeRecord;
+  texture: number;
+  version: 1;
 }
 
 interface AuthProviderState {

@@ -133,6 +133,8 @@ describe("sqlite persistence adapter", () => {
         runs: [run],
         runResults: [runResult],
         agentActivityItems: [promptActivityItem, commandActivityItem],
+        customSatelliteTypes: [],
+        customSatelliteInstances: [],
         appMetadata: {
           selectedProjectId: project.id
         }
@@ -169,6 +171,8 @@ describe("sqlite persistence adapter", () => {
       });
 
       await expect(adapter.loadState()).resolves.toMatchObject({
+        customSatelliteTypes: [],
+        customSatelliteInstances: [],
         appMetadata: {
           selectedProjectId: "project-2",
           notesState
@@ -247,6 +251,8 @@ describe("sqlite persistence adapter", () => {
         runs: [secondRun],
         runResults: [createInitialRunResult(secondRun.id)],
         agentActivityItems: [],
+        customSatelliteTypes: [],
+        customSatelliteInstances: [],
         appMetadata: {
           selectedProjectId: null
         }
@@ -420,6 +426,8 @@ describe("sqlite persistence adapter", () => {
         ],
         runResults: [runResult],
         agentActivityItems: [activityItem],
+        customSatelliteTypes: [],
+        customSatelliteInstances: [],
         appMetadata: {
           selectedProjectId: "project-1"
         }
@@ -596,6 +604,8 @@ describe("sqlite persistence adapter", () => {
         runs: [],
         runResults: [],
         agentActivityItems: [],
+        customSatelliteTypes: [],
+        customSatelliteInstances: [],
         appMetadata: {
           selectedProjectId: null
         }

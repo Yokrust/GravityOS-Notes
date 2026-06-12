@@ -18,11 +18,11 @@ export interface FileNode {
   updatedAt?: number;
 }
 
-export type SatelliteKind = "quick-note" | "calendar" | "pomodoro";
+export type BuiltInSatelliteKind = "quick-note" | "calendar" | "pomodoro";
+export type SatelliteKind = BuiltInSatelliteKind | "custom";
 
-export interface Satellite {
+interface SatelliteFrame {
   id: string;
-  kind: SatelliteKind;
   /** Position of satellite on canvas */
   x: number;
   y: number;
@@ -30,9 +30,24 @@ export interface Satellite {
   height: number;
   /** Stack order */
   z: number;
+}
+
+export interface BuiltInSatellite extends SatelliteFrame {
+  kind: BuiltInSatelliteKind;
   /** Per-satellite metadata (e.g. which quick-note is being edited) */
   meta?: SatelliteMeta;
 }
+
+/** Instancia persistida de un Satellite custom, proyectada al lienzo. */
+export interface CustomSatellite extends SatelliteFrame {
+  kind: "custom";
+  customTypeId: string;
+  data: Record<string, SatelliteValueRecord>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type Satellite = BuiltInSatellite | CustomSatellite;
 
 export interface SatelliteMeta {
   activeQuickNoteId?: string;

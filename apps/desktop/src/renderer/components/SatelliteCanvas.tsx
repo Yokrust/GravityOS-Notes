@@ -7,11 +7,13 @@ import { canvasRef, CanvasRefContext } from "@/lib/canvas-ref";
 import { QuickNoteSatellite } from "./satellites/QuickNote";
 import { CalendarSatellite } from "./satellites/Calendar";
 import { PomodoroSatellite } from "./satellites/Pomodoro";
+import { CustomSatelliteCard } from "./satellites/CustomSatellite";
 
 function SatelliteFrame({ sat }: { sat: Satellite }) {
   if (sat.kind === "quick-note") return <QuickNoteSatellite sat={sat} />;
   if (sat.kind === "calendar") return <CalendarSatellite sat={sat} />;
   if (sat.kind === "pomodoro") return <PomodoroSatellite sat={sat} />;
+  if (sat.kind === "custom") return <CustomSatelliteCard sat={sat} />;
   return null;
 }
 

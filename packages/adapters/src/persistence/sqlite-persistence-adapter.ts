@@ -5,8 +5,11 @@ import type {
   PersistedAppState,
   PersistencePort
 } from "@gravity/application";
+import { normalizeAppearancePreferences } from "@gravity/application";
 import type {
   AgentActivityItem,
+  CustomSatelliteInstance,
+  CustomSatelliteType,
   Project,
   Run,
   RunResult,
@@ -55,6 +58,16 @@ export class SqlitePersistenceAdapter implements PersistencePort {
         "agent_activity_items",
         "run_id, sequence",
         normalizeAgentActivityItem
+      ),
+      customSatelliteTypes: this.readCollection(
+        "custom_satellite_types",
+        "created_at, id",
+        normalizeCustomSatelliteType
+      ),
+      customSatelliteInstances: this.readCollection(
+        "custom_satellite_instances",
+        "created_at, id",
+        normalizeCustomSatelliteInstance
       ),
       appMetadata: this.readAppMetadata()
     };
@@ -168,6 +181,47 @@ export class SqlitePersistenceAdapter implements PersistencePort {
         activityItem.sequence,
         JSON.stringify(activityItem)
       );
+  }
+
+  async saveCustomSatelliteType(
+    customType: CustomSatelliteType
+  ): Promise<void> {
+    this.database
+      .prepare(
+        `INSERT INTO custom_satellite_types (id, created_at, payload)
+         VALUES (?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           created_at = excluded.created_at,
+           payload = excluded.payload`
+      )
+      .run(customType.id, customType.createdAt, JSON.stringify(customType));
+  }
+
+  async saveCustomSatelliteInstance(
+    instance: CustomSatelliteInstance
+  ): Promise<void> {
+    this.database
+      .prepare(
+        `INSERT INTO custom_satellite_instances
+           (id, custom_type_id, created_at, payload)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           custom_type_id = excluded.custom_type_id,
+           created_at = excluded.created_at,
+           payload = excluded.payload`
+      )
+      .run(
+        instance.id,
+        instance.customTypeId,
+        instance.createdAt,
+        JSON.stringify(instance)
+      );
+  }
+
+  async deleteCustomSatelliteInstance(instanceId: string): Promise<void> {
+    this.database
+      .prepare("DELETE FROM custom_satellite_instances WHERE id = ?")
+      .run(instanceId);
   }
 
   async getRun(runId: string): Promise<Run | null> {
@@ -304,6 +358,19 @@ export class SqlitePersistenceAdapter implements PersistencePort {
         payload TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS custom_satellite_types (
+        id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        payload TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS custom_satellite_instances (
+        id TEXT PRIMARY KEY,
+        custom_type_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        payload TEXT NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS app_metadata (
         key TEXT PRIMARY KEY,
         payload TEXT NOT NULL
@@ -430,6 +497,13 @@ function normalizeAppMetadata(
     normalized.notesState = normalizeNotesState(appMetadata.notesState);
   }
 
+  if (appMetadata.appearancePreferences !== undefined) {
+    normalized.appearancePreferences =
+      appMetadata.appearancePreferences === null
+        ? null
+        : normalizeAppearancePreferences(appMetadata.appearancePreferences);
+  }
+
   return normalized;
 }
 
@@ -441,11 +515,18 @@ function mergeAppMetadata(
     incoming.notesState === undefined
       ? current.notesState
       : incoming.notesState;
+  const mergedAppearancePreferences =
+    incoming.appearancePreferences === undefined
+      ? current.appearancePreferences
+      : incoming.appearancePreferences;
 
   return normalizeAppMetadata({
     ...current,
     ...incoming,
-    ...(mergedNotesState === undefined ? {} : { notesState: mergedNotesState })
+    ...(mergedNotesState === undefined ? {} : { notesState: mergedNotesState }),
+    ...(mergedAppearancePreferences === undefined
+      ? {}
+      : { appearancePreferences: mergedAppearancePreferences })
   });
 }
 
@@ -513,6 +594,16 @@ function normalizeAgentActivityItem(payload: string): AgentActivityItem {
     status: activityItem.status,
     text: activityItem.text
   };
+}
+
+function normalizeCustomSatelliteType(payload: string): CustomSatelliteType {
+  return JSON.parse(payload) as CustomSatelliteType;
+}
+
+function normalizeCustomSatelliteInstance(
+  payload: string
+): CustomSatelliteInstance {
+  return JSON.parse(payload) as CustomSatelliteInstance;
 }
 
 function normalizeThread(payload: string): Thread {

@@ -712,15 +712,15 @@ function BlockView({
         <button
           className={`mt-[5px] grid h-[15px] w-[15px] shrink-0 place-items-center rounded-[5px] border transition ${
             block.checked
-              ? "border-[color:var(--ink)] bg-[color:var(--ink)]"
-              : "border-[color:var(--line-strong)] hover:border-[color:var(--ink)]"
+              ? "border-[color:var(--accent)] bg-[color:var(--accent)]"
+              : "border-[color:var(--line-strong)] hover:border-[color:var(--accent)]"
           }`}
           onClick={() => onUpdate({ checked: !block.checked })}
           type="button"
         >
           {block.checked ? (
             <svg
-              className="h-2.5 w-2.5 text-[color:var(--bg-paper)]"
+              className="h-2.5 w-2.5 text-[color:var(--accent-ink)]"
               viewBox="0 0 12 12"
             >
               <path

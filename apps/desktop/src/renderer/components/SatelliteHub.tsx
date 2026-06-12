@@ -3,17 +3,22 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
-import { Calendar, Sparkles, StickyNote, Timer, X } from "lucide-react";
-import type { SatelliteKind } from "@/lib/types";
+import { Calendar, Plus, Sparkles, StickyNote, Timer, X } from "lucide-react";
+import type { BuiltInSatelliteKind, SatelliteKind } from "@/lib/types";
 import { useStore } from "@/lib/store";
 import { canvasRef } from "@/lib/canvas-ref";
 import {
   isSatelliteActive,
   isSatelliteGhosted
 } from "@/lib/satellite-hub-utils";
+import {
+  CUSTOM_SATELLITE_COLORS,
+  CustomSatelliteIcon
+} from "@/lib/satellite-visuals";
+import { SatelliteCreator } from "./SatelliteCreator";
 
 interface SatelliteMeta {
-  kind: SatelliteKind;
+  kind: BuiltInSatelliteKind;
   title: string;
   desc: string;
   icon: React.ReactNode;
@@ -48,12 +53,13 @@ const SATELLITES: SatelliteMeta[] = [
   }
 ];
 
-interface DragState {
-  kind: SatelliteKind;
-  meta: SatelliteMeta;
+type DragState = {
   x: number;
   y: number;
-}
+} & (
+  | { source: "built-in"; kind: BuiltInSatelliteKind; meta: SatelliteMeta }
+  | { source: "custom"; customType: CustomSatelliteTypeRecord }
+);
 
 const DragContext = { current: null as null | ((d: DragState | null) => void) };
 
@@ -63,12 +69,15 @@ export function SatelliteHubButton() {
     toggleHub,
     setHub,
     spawnSatellite,
+    spawnCustomSatellite,
     focusSatellite,
     satellites,
+    customSatelliteTypes,
     pomodoroTimer,
     reminders
   } = useStore();
   const [drag, setDrag] = useState<DragState | null>(null);
+  const [creatorOpen, setCreatorOpen] = useState(false);
   const dragRef = useRef<DragState | null>(null);
   const now = Date.now();
 
@@ -87,7 +96,15 @@ export function SatelliteHubButton() {
         const el = canvasRef.current;
         if (el) {
           const r = el.getBoundingClientRect();
-          spawnSatellite(current.kind, e.clientX - r.left, e.clientY - r.top);
+          if (current.source === "built-in") {
+            spawnSatellite(current.kind, e.clientX - r.left, e.clientY - r.top);
+          } else {
+            void spawnCustomSatellite(
+              current.customType.id,
+              e.clientX - r.left,
+              e.clientY - r.top
+            );
+          }
         }
       }
       setDrag(null);
@@ -107,15 +124,29 @@ export function SatelliteHubButton() {
       document.body.style.userSelect = prevSelect;
       document.body.style.cursor = prevCursor;
     };
-  }, [drag, spawnSatellite]);
+  }, [drag, spawnCustomSatellite, spawnSatellite]);
 
   const startDrag = (
     e: React.PointerEvent<HTMLButtonElement>,
     meta: SatelliteMeta
   ) => {
     setDrag({
+      source: "built-in",
       kind: meta.kind,
       meta,
+      x: e.clientX,
+      y: e.clientY
+    });
+    setHub(false);
+  };
+
+  const startCustomDrag = (
+    e: React.PointerEvent<HTMLButtonElement>,
+    customType: CustomSatelliteTypeRecord
+  ) => {
+    setDrag({
+      source: "custom",
+      customType,
       x: e.clientX,
       y: e.clientY
     });
@@ -185,81 +216,146 @@ export function SatelliteHubButton() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.97 }}
             transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-            className="glass-strong absolute right-0 mt-2 w-[320px] rounded-[var(--radius-lg)] p-2 z-40"
+            className="glass-strong absolute right-0 top-full mt-2 flex max-h-[calc(100vh-72px)] w-[320px] flex-col rounded-[var(--radius-lg)] p-2 z-40"
           >
-            <div className="px-3 pt-2 pb-2 border-b border-[color:var(--line)] flex items-baseline justify-between">
+            <div className="shrink-0 px-3 pt-2 pb-2 border-b border-[color:var(--line)] flex items-baseline justify-between">
               <div className="font-display text-[15px] font-semibold tracking-tight">
                 Satélites
               </div>
             </div>
-            <div className="flex flex-col gap-0.5 pt-1">
-              {SATELLITES.map((s, i) => {
-                const ghosted = isGhosted(s.kind);
-                const active = isActive(s.kind);
-                return (
-                  <motion.button
-                    key={s.kind}
-                    initial={{ opacity: 0, x: 6 }}
-                    animate={{ opacity: ghosted ? 0.45 : 1, x: 0 }}
-                    transition={{
-                      delay: 0.04 + i * 0.05,
-                      duration: 0.28,
-                      ease: [0.22, 1, 0.36, 1]
-                    }}
-                    whileHover={ghosted ? { opacity: 0.65 } : { x: 2 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={
-                      ghosted ? () => recallSatellite(s.kind) : undefined
-                    }
-                    onPointerDown={ghosted ? undefined : (e) => startDrag(e, s)}
-                    className={`group flex items-center gap-3 rounded-xl px-2.5 py-2 hover:bg-[color:var(--accent-soft)] transition ${
-                      ghosted
-                        ? "cursor-pointer"
-                        : "cursor-grab active:cursor-grabbing"
-                    } touch-none select-none`}
-                  >
-                    <span
-                      className={`relative grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-gradient-to-br ${s.accent} text-black`}
+            <div className="scroll-thin -mr-1 min-h-0 flex-1 overflow-y-auto pr-1">
+              <div className="flex flex-col gap-0.5 pt-1">
+                {SATELLITES.map((s, i) => {
+                  const ghosted = isGhosted(s.kind);
+                  const active = isActive(s.kind);
+                  return (
+                    <motion.button
+                      key={s.kind}
+                      initial={{ opacity: 0, x: 6 }}
+                      animate={{ opacity: ghosted ? 0.45 : 1, x: 0 }}
+                      transition={{
+                        delay: 0.04 + i * 0.05,
+                        duration: 0.28,
+                        ease: [0.22, 1, 0.36, 1]
+                      }}
+                      whileHover={ghosted ? { opacity: 0.65 } : { x: 2 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={
+                        ghosted ? () => recallSatellite(s.kind) : undefined
+                      }
+                      onPointerDown={
+                        ghosted ? undefined : (e) => startDrag(e, s)
+                      }
+                      className={`group flex items-center gap-3 rounded-xl px-2.5 py-2 hover:bg-[color:var(--accent-soft)] transition ${
+                        ghosted
+                          ? "cursor-pointer"
+                          : "cursor-grab active:cursor-grabbing"
+                      } touch-none select-none`}
                     >
-                      {s.icon}
-                      <motion.span
-                        className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full"
-                        style={{ backgroundColor: s.dotColor }}
-                        animate={
-                          active
-                            ? { opacity: [1, 0.3, 1], scale: [1, 1.4, 1] }
-                            : { opacity: 1, scale: 1 }
-                        }
-                        transition={
-                          active
-                            ? {
-                                repeat: Infinity,
-                                duration: 1.6,
-                                ease: "easeInOut"
-                              }
-                            : { duration: 0.3 }
-                        }
-                      />
-                    </span>
-                    <span className="flex flex-col text-left leading-tight">
-                      <span className="font-display text-[14px] font-semibold">
-                        {s.title}
+                      <span
+                        className={`relative grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-gradient-to-br ${s.accent} text-black`}
+                      >
+                        {s.icon}
+                        <motion.span
+                          className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full"
+                          style={{ backgroundColor: s.dotColor }}
+                          animate={
+                            active
+                              ? { opacity: [1, 0.3, 1], scale: [1, 1.4, 1] }
+                              : { opacity: 1, scale: 1 }
+                          }
+                          transition={
+                            active
+                              ? {
+                                  repeat: Infinity,
+                                  duration: 1.6,
+                                  ease: "easeInOut"
+                                }
+                              : { duration: 0.3 }
+                          }
+                        />
                       </span>
-                      <span className="text-[11.5px] text-[color:var(--faint)] font-mono">
-                        {ghosted ? "ya abierto" : s.desc}
+                      <span className="flex flex-col text-left leading-tight">
+                        <span className="font-display text-[14px] font-semibold">
+                          {s.title}
+                        </span>
+                        <span className="text-[11.5px] text-[color:var(--faint)] font-mono">
+                          {ghosted ? "ya abierto" : s.desc}
+                        </span>
                       </span>
-                    </span>
-                    {!ghosted ? (
-                      <span className="ml-auto text-[10.5px] text-[color:var(--faint)] font-mono opacity-0 group-hover:opacity-100 transition">
-                        drag →
-                      </span>
-                    ) : null}
-                  </motion.button>
-                );
-              })}
+                      {!ghosted ? (
+                        <span className="ml-auto text-[10.5px] text-[color:var(--faint)] font-mono opacity-0 group-hover:opacity-100 transition">
+                          drag →
+                        </span>
+                      ) : null}
+                    </motion.button>
+                  );
+                })}
+              </div>
+              <div className="mt-1 border-t border-[color:var(--line)] pt-1">
+                <div className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.14em] text-[color:var(--faint)]">
+                  My Satellites
+                </div>
+                {customSatelliteTypes.length === 0 ? (
+                  <p className="px-3 pb-2 text-[11px] text-[color:var(--faint)]">
+                    Aún no has creado Satellites.
+                  </p>
+                ) : (
+                  customSatelliteTypes.map((customType, index) => {
+                    const palette = CUSTOM_SATELLITE_COLORS[customType.color];
+                    return (
+                      <motion.button
+                        key={customType.id}
+                        initial={{ opacity: 0, x: 6 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{
+                          delay: 0.04 + index * 0.05,
+                          duration: 0.28,
+                          ease: [0.22, 1, 0.36, 1]
+                        }}
+                        whileHover={{ x: 2 }}
+                        whileTap={{ scale: 0.98 }}
+                        onPointerDown={(e) => startCustomDrag(e, customType)}
+                        className="group flex w-full cursor-grab touch-none select-none items-center gap-3 rounded-xl px-2.5 py-2 transition hover:bg-[color:var(--accent-soft)] active:cursor-grabbing"
+                      >
+                        <span
+                          className="grid h-9 w-9 place-items-center rounded-xl border border-[color:var(--line)]"
+                          style={{
+                            background: palette.soft,
+                            color: palette.accent
+                          }}
+                        >
+                          <CustomSatelliteIcon icon={customType.icon} />
+                        </span>
+                        <span className="flex min-w-0 flex-col text-left leading-tight">
+                          <span className="font-display truncate text-[14px] font-semibold">
+                            {customType.name}
+                          </span>
+                          <span className="text-[11.5px] text-[color:var(--faint)] font-mono">
+                            {customType.properties.length} campos
+                          </span>
+                        </span>
+                        <span className="ml-auto font-mono text-[10.5px] text-[color:var(--faint)] opacity-0 transition group-hover:opacity-100">
+                          drag →
+                        </span>
+                      </motion.button>
+                    );
+                  })
+                )}
+              </div>
             </div>
-            <div className="px-3 pt-2 pb-1 text-[10.5px] text-[color:var(--faint)] font-mono border-t border-[color:var(--line)] mt-1 flex items-center justify-between">
-              <span>Pin &amp; float</span>
+            <div className="shrink-0 mt-1 border-t border-[color:var(--line)] px-2 pt-2 pb-1.5">
+              <button
+                className="hub-create-satellite"
+                onClick={() => {
+                  setHub(false);
+                  setCreatorOpen(true);
+                }}
+                type="button"
+              >
+                <Plus size={13} />
+                Crear Satellite
+              </button>
             </div>
           </motion.div>
         )}
@@ -268,11 +364,24 @@ export function SatelliteHubButton() {
       {drag && typeof document !== "undefined"
         ? createPortal(<DragGhost drag={drag} />, document.body)
         : null}
+
+      <SatelliteCreator
+        onClose={() => setCreatorOpen(false)}
+        open={creatorOpen}
+      />
     </div>
   );
 }
 
 function DragGhost({ drag }: { drag: DragState }) {
+  const isCustom = drag.source === "custom";
+  const title = isCustom ? drag.customType.name : drag.meta.title;
+  const icon = isCustom ? (
+    <CustomSatelliteIcon icon={drag.customType.icon} size={13} />
+  ) : (
+    drag.meta.icon
+  );
+
   return (
     <motion.div
       initial={{ scale: 0.94, opacity: 0 }}
@@ -290,9 +399,9 @@ function DragGhost({ drag }: { drag: DragState }) {
       className="satellite-shell flex items-center gap-2 rounded-[14px] px-2.5 py-1.5"
     >
       <span className="sat-icon-btn" data-active="true">
-        {drag.meta.icon}
+        {icon}
       </span>
-      <span className="sat-title pr-1">{drag.meta.title}</span>
+      <span className="sat-title pr-1">{title}</span>
     </motion.div>
   );
 }

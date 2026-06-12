@@ -10,13 +10,13 @@ import {
   useState
 } from "react";
 import type {
+  BuiltInSatelliteKind,
   FileNode,
   NoteId,
   QuickNote,
   Reminder,
   ReminderRecurrence,
   Satellite,
-  SatelliteKind,
   SatelliteMeta
 } from "./types";
 import { reminderFiresNow } from "./reminder-utils";
@@ -62,6 +62,8 @@ interface State {
   notesError: string | null;
   notesLoading: boolean;
   satellites: Satellite[];
+  customSatelliteTypes: CustomSatelliteTypeRecord[];
+  customSatelliteError: string | null;
   quickNotes: QuickNote[];
   reminders: Reminder[];
   pomodoroTimer: PomodoroTimer;
@@ -82,7 +84,20 @@ type Action =
   | { type: "toggle-hub" }
   | { type: "set-hub"; open: boolean }
   | { type: "set-palette"; open: boolean }
-  | { type: "spawn-satellite"; kind: SatelliteKind; x?: number; y?: number }
+  | {
+      type: "spawn-satellite";
+      kind: BuiltInSatelliteKind;
+      x?: number;
+      y?: number;
+    }
+  | { type: "hydrate-custom-satellites"; state: CustomSatelliteStateRecord }
+  | { type: "set-custom-satellite-error"; message: string | null }
+  | {
+      type: "set-custom-satellite-value";
+      id: string;
+      key: string;
+      value: SatelliteValueRecord;
+    }
   | { type: "close-satellite"; id: string }
   | { type: "move-satellite"; id: string; x: number; y: number }
   | { type: "resize-satellite"; id: string; width: number; height: number }
@@ -120,6 +135,8 @@ const initialState: State = {
   notesError: null,
   notesLoading: true,
   satellites: [],
+  customSatelliteTypes: [],
+  customSatelliteError: null,
   quickNotes: [
     {
       id: "qn-seed",
@@ -220,6 +237,40 @@ function reducer(state: State, action: Action): State {
       return { ...state, hubOpen: action.open };
     case "set-palette":
       return { ...state, paletteOpen: action.open };
+    case "hydrate-custom-satellites": {
+      const builtIns = state.satellites.filter(
+        (satellite) => satellite.kind !== "custom"
+      );
+      const customs: Satellite[] = action.state.instances.map((instance) => ({
+        ...instance,
+        kind: "custom" as const
+      }));
+      const zCounter = customs.reduce(
+        (highest, satellite) => Math.max(highest, satellite.z),
+        state.zCounter
+      );
+      return {
+        ...state,
+        customSatelliteTypes: action.state.customTypes,
+        customSatelliteError: null,
+        satellites: [...builtIns, ...customs],
+        zCounter
+      };
+    }
+    case "set-custom-satellite-error":
+      return { ...state, customSatelliteError: action.message };
+    case "set-custom-satellite-value":
+      return {
+        ...state,
+        satellites: state.satellites.map((satellite) =>
+          satellite.kind === "custom" && satellite.id === action.id
+            ? {
+                ...satellite,
+                data: { ...satellite.data, [action.key]: action.value }
+              }
+            : satellite
+        )
+      };
     case "spawn-satellite": {
       if (action.kind === "pomodoro" || action.kind === "calendar") {
         const existing = state.satellites.find(
@@ -238,7 +289,7 @@ function reducer(state: State, action: Action): State {
         }
       }
       const z = state.zCounter + 1;
-      const baseSize: Record<SatelliteKind, { w: number; h: number }> = {
+      const baseSize: Record<BuiltInSatelliteKind, { w: number; h: number }> = {
         "quick-note": { w: 320, h: 360 },
         calendar: { w: 320, h: 400 },
         pomodoro: { w: 290, h: 380 }
@@ -319,7 +370,7 @@ function reducer(state: State, action: Action): State {
       return {
         ...state,
         satellites: state.satellites.map((s) =>
-          s.id === action.id
+          s.id === action.id && s.kind !== "custom"
             ? { ...s, meta: { ...(s.meta ?? {}), ...action.meta } }
             : s
         )
@@ -399,7 +450,26 @@ interface StoreContextValue extends State {
   toggleHub: () => void;
   setHub: (open: boolean) => void;
   setPalette: (open: boolean) => void;
-  spawnSatellite: (kind: SatelliteKind, x?: number, y?: number) => void;
+  spawnSatellite: (kind: BuiltInSatelliteKind, x?: number, y?: number) => void;
+  refreshCustomSatellites: () => Promise<void>;
+  confirmCustomSatellite: (
+    proposal: CustomSatelliteProposalRecord
+  ) => Promise<void>;
+  spawnCustomSatellite: (
+    customTypeId: string,
+    x?: number,
+    y?: number
+  ) => Promise<void>;
+  setCustomSatelliteValue: (
+    id: string,
+    key: string,
+    value: SatelliteValueRecord
+  ) => void;
+  commitCustomSatelliteValue: (
+    id: string,
+    key: string,
+    value: SatelliteValueRecord
+  ) => Promise<void>;
   closeSatellite: (id: string) => void;
   moveSatellite: (id: string, x: number, y: number) => void;
   resizeSatellite: (id: string, width: number, height: number) => void;
@@ -462,6 +532,25 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     state.pomodoroTimer.cycles,
     state.pomodoroTimer.breaks
   ]);
+
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      !window.gravity?.getCustomSatelliteState
+    ) {
+      return;
+    }
+
+    void window.gravity
+      .getCustomSatelliteState()
+      .then((state) => dispatch({ type: "hydrate-custom-satellites", state }))
+      .catch((error: unknown) =>
+        dispatch({
+          type: "set-custom-satellite-error",
+          message: getErrorMessage(error)
+        })
+      );
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.gravity?.getNotesState) {
@@ -723,11 +812,116 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           ...(x === undefined ? {} : { x }),
           ...(y === undefined ? {} : { y })
         }),
-      closeSatellite: (id) => dispatch({ type: "close-satellite", id }),
-      moveSatellite: (id, x, y) =>
-        dispatch({ type: "move-satellite", id, x, y }),
-      resizeSatellite: (id, width, height) =>
-        dispatch({ type: "resize-satellite", id, width, height }),
+      refreshCustomSatellites: async () => {
+        if (!window.gravity?.getCustomSatelliteState) return;
+        const nextState = await window.gravity.getCustomSatelliteState();
+        dispatch({ type: "hydrate-custom-satellites", state: nextState });
+      },
+      confirmCustomSatellite: async (proposal) => {
+        const nextState = await window.gravity.confirmCustomSatellite(proposal);
+        dispatch({ type: "hydrate-custom-satellites", state: nextState });
+      },
+      spawnCustomSatellite: async (customTypeId, x, y) => {
+        const canvas = canvasRef.current?.getBoundingClientRect();
+        const cw = canvas?.width ?? 900;
+        const ch = canvas?.height ?? 700;
+        const rawX = x === undefined ? (cw - 320) / 2 : x - 28;
+        const rawY = y === undefined ? (ch - 420) / 2 : y - 16;
+        try {
+          const nextState = await window.gravity.createCustomSatelliteInstance({
+            customTypeId,
+            x: Math.max(2, Math.min(rawX, cw - 320 - 2)),
+            y: Math.max(2, Math.min(rawY, ch - 420 - 2)),
+            z: state.zCounter + 1
+          });
+          dispatch({ type: "hydrate-custom-satellites", state: nextState });
+          dispatch({ type: "set-hub", open: false });
+        } catch (error: unknown) {
+          dispatch({
+            type: "set-custom-satellite-error",
+            message: getErrorMessage(error)
+          });
+        }
+      },
+      setCustomSatelliteValue: (id, key, value) =>
+        dispatch({ type: "set-custom-satellite-value", id, key, value }),
+      commitCustomSatelliteValue: async (id, key, value) => {
+        try {
+          const nextState = await window.gravity.updateCustomSatelliteValue({
+            instanceId: id,
+            key,
+            value
+          });
+          dispatch({ type: "hydrate-custom-satellites", state: nextState });
+        } catch (error: unknown) {
+          dispatch({
+            type: "set-custom-satellite-error",
+            message: getErrorMessage(error)
+          });
+        }
+      },
+      closeSatellite: (id) => {
+        const target = state.satellites.find(
+          (satellite) => satellite.id === id
+        );
+        dispatch({ type: "close-satellite", id });
+        if (target?.kind !== "custom") return;
+        window.gravity
+          .closeCustomSatelliteInstance(id)
+          .then((nextState) =>
+            dispatch({ type: "hydrate-custom-satellites", state: nextState })
+          )
+          .catch((error: unknown) =>
+            dispatch({
+              type: "set-custom-satellite-error",
+              message: getErrorMessage(error)
+            })
+          );
+      },
+      moveSatellite: (id, x, y) => {
+        const target = state.satellites.find(
+          (satellite) => satellite.id === id
+        );
+        dispatch({ type: "move-satellite", id, x, y });
+        if (target?.kind !== "custom") return;
+        window.gravity
+          .updateCustomSatelliteFrame({
+            instanceId: id,
+            x,
+            y,
+            width: target.width,
+            height: target.height,
+            z: target.z
+          })
+          .catch((error: unknown) =>
+            dispatch({
+              type: "set-custom-satellite-error",
+              message: getErrorMessage(error)
+            })
+          );
+      },
+      resizeSatellite: (id, width, height) => {
+        const target = state.satellites.find(
+          (satellite) => satellite.id === id
+        );
+        dispatch({ type: "resize-satellite", id, width, height });
+        if (target?.kind !== "custom") return;
+        window.gravity
+          .updateCustomSatelliteFrame({
+            instanceId: id,
+            x: target.x,
+            y: target.y,
+            width,
+            height,
+            z: target.z
+          })
+          .catch((error: unknown) =>
+            dispatch({
+              type: "set-custom-satellite-error",
+              message: getErrorMessage(error)
+            })
+          );
+      },
       focusSatellite: (id) => dispatch({ type: "focus-satellite", id }),
       setSatelliteMeta: (id, meta) =>
         dispatch({ type: "set-satellite-meta", id, meta }),

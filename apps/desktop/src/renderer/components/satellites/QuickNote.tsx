@@ -14,7 +14,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { SatelliteShell } from "./SatelliteShell";
 import { useStore } from "@/lib/store";
 import { filterNotesByTitle, getLockedNoteIds } from "@/lib/quick-note-utils";
-import type { QuickNote, Satellite } from "@/lib/types";
+import type { BuiltInSatellite, QuickNote } from "@/lib/types";
 
 type FontSize = "sm" | "md" | "lg";
 const FONT_SIZE_PX: Record<FontSize, number> = { sm: 12.5, md: 14, lg: 16 };
@@ -30,7 +30,7 @@ function relativeTime(ts: number): string {
   return `${d}d`;
 }
 
-export function QuickNoteSatellite({ sat }: { sat: Satellite }) {
+export function QuickNoteSatellite({ sat }: { sat: BuiltInSatellite }) {
   const {
     quickNotes,
     satellites,
@@ -175,14 +175,14 @@ export function QuickNoteSatellite({ sat }: { sat: Satellite }) {
           value={draftTitle}
           onChange={(e) => setDraftTitle(e.target.value)}
           placeholder="Título"
-          className="bg-transparent outline-none px-4 pt-3 pb-1 text-[15px] font-medium tracking-tight text-[var(--sat-ink)]"
+          className="bg-transparent outline-none px-4 pt-3 pb-1 text-[15px] font-medium tracking-tight text-[color:var(--sat-ink)]"
         />
         <textarea
           value={draftBody}
           onChange={(e) => setDraftBody(e.target.value)}
           placeholder="Empieza a escribir…"
           spellCheck={false}
-          className="flex-1 resize-none bg-transparent outline-none border-none px-4 pb-4 pt-1 leading-[1.55] text-[var(--sat-ink)]"
+          className="flex-1 resize-none bg-transparent outline-none border-none px-4 pb-4 pt-1 leading-[1.55] text-[color:var(--sat-ink)]"
           style={{ fontSize: FONT_SIZE_PX[size] }}
         />
 
@@ -196,27 +196,27 @@ export function QuickNoteSatellite({ sat }: { sat: Satellite }) {
               className="absolute top-1 left-2 right-2 max-h-[70%] overflow-y-auto scroll-thin rounded-xl border border-[var(--sat-line-strong)] bg-[var(--sat-bg-2)]/95 backdrop-blur-md p-1 z-10"
             >
               <div className="flex items-center justify-between px-2 pt-1.5 pb-1">
-                <span className="text-[10px] uppercase tracking-[0.18em] text-[var(--sat-faint)] font-mono">
+                <span className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--sat-faint)] font-mono">
                   Quick notes
                 </span>
                 <button
                   onClick={handleNew}
-                  className="text-[10.5px] uppercase tracking-[0.16em] text-[var(--sat-muted)] hover:text-[var(--sat-ink)] font-mono inline-flex items-center gap-1"
+                  className="text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--sat-muted)] hover:text-[color:var(--sat-ink)] font-mono inline-flex items-center gap-1"
                 >
                   <Plus size={11} /> nueva
                 </button>
               </div>
-              <div className="flex items-center gap-1.5 mx-1 mb-1 px-2 py-1 rounded-lg bg-black/20 border border-[var(--sat-line-strong)]">
+              <div className="sat-inset flex items-center gap-1.5 mx-1 mb-1 px-2 py-1 rounded-lg">
                 <Search
                   size={11}
                   strokeWidth={1.6}
-                  className="text-[var(--sat-faint)] shrink-0"
+                  className="text-[color:var(--sat-faint)] shrink-0"
                 />
                 <input
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Buscar…"
-                  className="flex-1 bg-transparent outline-none text-[11.5px] text-[var(--sat-ink)] placeholder:text-[var(--sat-faint)]"
+                  className="flex-1 bg-transparent outline-none text-[11.5px] text-[color:var(--sat-ink)] placeholder:text-[color:var(--sat-faint)]"
                 />
               </div>
               <ul className="flex flex-col">
@@ -236,10 +236,10 @@ export function QuickNoteSatellite({ sat }: { sat: Satellite }) {
                         disabled={locked}
                         className={`w-full text-left rounded-lg px-2 py-1.5 flex items-center gap-2 transition ${
                           active
-                            ? "bg-white/8 text-[var(--sat-ink)]"
+                            ? "bg-[var(--sat-active)] text-[color:var(--sat-ink)]"
                             : locked
-                              ? "text-[var(--sat-muted)] cursor-not-allowed"
-                              : "text-[var(--sat-muted)] hover:bg-white/4 hover:text-[var(--sat-ink)]"
+                              ? "text-[color:var(--sat-muted)] cursor-not-allowed"
+                              : "text-[color:var(--sat-muted)] hover:bg-[var(--sat-hover)] hover:text-[color:var(--sat-ink)]"
                         }`}
                       >
                         <FileText
@@ -250,7 +250,7 @@ export function QuickNoteSatellite({ sat }: { sat: Satellite }) {
                         <span className="flex-1 truncate text-[12.5px]">
                           {n.title.trim() || "Sin título"}
                         </span>
-                        <span className="text-[10px] font-mono text-[var(--sat-faint)] shrink-0">
+                        <span className="text-[10px] font-mono text-[color:var(--sat-faint)] shrink-0">
                           {relativeTime(n.updatedAt)}
                         </span>
                       </button>

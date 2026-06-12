@@ -14,7 +14,7 @@ import { useMemo, useState } from "react";
 import { SatelliteShell } from "./SatelliteShell";
 import { useStore } from "@/lib/store";
 import { reminderMatchesDate } from "@/lib/reminder-utils";
-import type { ReminderRecurrence, Satellite } from "@/lib/types";
+import type { BuiltInSatellite, ReminderRecurrence } from "@/lib/types";
 
 const MONTHS = [
   "Enero",
@@ -50,7 +50,7 @@ function isoDate(year: number, month0: number, day: number): string {
   return `${year}-${m}-${d}`;
 }
 
-export function CalendarSatellite({ sat }: { sat: Satellite }) {
+export function CalendarSatellite({ sat }: { sat: BuiltInSatellite }) {
   const { reminders, addReminder, deleteReminder } = useStore();
 
   const today = useMemo(() => new Date(), []);
@@ -138,7 +138,7 @@ export function CalendarSatellite({ sat }: { sat: Satellite }) {
             onClick={() =>
               setCursor(new Date(today.getFullYear(), today.getMonth(), 1))
             }
-            className="uppercase tracking-[0.18em] hover:text-[var(--sat-ink)] transition"
+            className="uppercase tracking-[0.18em] hover:text-[color:var(--sat-ink)] transition"
           >
             Hoy
           </button>
@@ -159,10 +159,10 @@ export function CalendarSatellite({ sat }: { sat: Satellite }) {
             <ChevronLeft size={13} strokeWidth={1.6} />
           </button>
           <div className="flex flex-col items-center leading-tight">
-            <span className="text-[9.5px] uppercase tracking-[0.22em] text-[var(--sat-faint)] font-mono">
+            <span className="text-[9.5px] uppercase tracking-[0.22em] text-[color:var(--sat-faint)] font-mono">
               {cursor.getFullYear()}
             </span>
-            <span className="text-[14px] font-medium tracking-tight text-[var(--sat-ink)]">
+            <span className="text-[14px] font-medium tracking-tight text-[color:var(--sat-ink)]">
               {MONTHS[cursor.getMonth()]}
             </span>
           </div>
@@ -179,7 +179,7 @@ export function CalendarSatellite({ sat }: { sat: Satellite }) {
         </div>
 
         {/* DOW header */}
-        <div className="grid grid-cols-7 gap-y-0.5 px-2 mt-1 text-center text-[9.5px] uppercase tracking-[0.18em] text-[var(--sat-faint)] font-mono">
+        <div className="grid grid-cols-7 gap-y-0.5 px-2 mt-1 text-center text-[9.5px] uppercase tracking-[0.18em] text-[color:var(--sat-faint)] font-mono">
           {DOW.map((d) => (
             <div key={d}>{d}</div>
           ))}
@@ -201,7 +201,7 @@ export function CalendarSatellite({ sat }: { sat: Satellite }) {
                 {isSel && (
                   <motion.span
                     layoutId={`cal-pill-${sat.id}`}
-                    className="absolute inset-1 rounded-full bg-[var(--sat-ink)]"
+                    className="absolute inset-1 rounded-full bg-[var(--sat-accent)]"
                     transition={{ type: "spring", stiffness: 500, damping: 36 }}
                   />
                 )}
@@ -209,16 +209,16 @@ export function CalendarSatellite({ sat }: { sat: Satellite }) {
                   onClick={() => setSelected(d)}
                   className={`relative h-7 w-7 rounded-full transition ${
                     isSel
-                      ? "text-[var(--sat-bg)] font-semibold"
+                      ? "text-[color:var(--sat-accent-ink)] font-semibold"
                       : isToday
-                        ? "text-[var(--sat-ink)] font-semibold"
-                        : "text-[var(--sat-muted)] hover:text-[var(--sat-ink)]"
+                        ? "text-[color:var(--sat-accent)] font-semibold"
+                        : "text-[color:var(--sat-muted)] hover:text-[color:var(--sat-ink)]"
                   }`}
                 >
                   {d}
                 </button>
                 {hasReminder && !isSel && (
-                  <span className="absolute bottom-0 h-[3px] w-[3px] rounded-full bg-[var(--sat-ink)]" />
+                  <span className="absolute bottom-0 h-[3px] w-[3px] rounded-full bg-[var(--sat-accent)]" />
                 )}
               </div>
             );
@@ -229,7 +229,7 @@ export function CalendarSatellite({ sat }: { sat: Satellite }) {
         <div className="sat-divider mt-2" />
         <div className="px-3 pt-2 pb-2 flex flex-col gap-1.5 flex-1 min-h-0">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] uppercase tracking-[0.22em] text-[var(--sat-faint)] font-mono">
+            <span className="text-[10px] uppercase tracking-[0.22em] text-[color:var(--sat-faint)] font-mono">
               {`${MONTHS[cursor.getMonth()]!.slice(0, 3)} ${selected}`}
             </span>
             <button
@@ -251,12 +251,12 @@ export function CalendarSatellite({ sat }: { sat: Satellite }) {
                 transition={{ duration: 0.18 }}
                 className="overflow-hidden"
               >
-                <div className="flex flex-col gap-1 rounded-md border border-[var(--sat-line-strong)] bg-black/30 px-2 py-1.5">
+                <div className="sat-inset flex flex-col gap-1 rounded-lg px-2 py-1.5">
                   <div className="flex items-center gap-1.5">
                     <Bell
                       size={11}
                       strokeWidth={1.6}
-                      className="text-[var(--sat-faint)]"
+                      className="text-[color:var(--sat-faint)]"
                     />
                     <input
                       autoFocus
@@ -270,7 +270,7 @@ export function CalendarSatellite({ sat }: { sat: Satellite }) {
                         }
                       }}
                       placeholder="Recordatorio…"
-                      className="flex-1 bg-transparent outline-none text-[12px] text-[var(--sat-ink)]"
+                      className="flex-1 bg-transparent outline-none text-[12px] text-[color:var(--sat-ink)]"
                     />
                   </div>
                   <div className="flex items-center gap-2 pl-[19px]">
@@ -278,14 +278,14 @@ export function CalendarSatellite({ sat }: { sat: Satellite }) {
                       type="time"
                       value={draftTime}
                       onChange={(e) => setDraftTime(e.target.value)}
-                      className="w-[68px] bg-transparent font-mono text-[11px] text-[var(--sat-muted)] outline-none"
+                      className="w-[68px] bg-transparent font-mono text-[11px] text-[color:var(--sat-muted)] outline-none"
                     />
                     <select
                       value={draftRecurrence}
                       onChange={(e) =>
                         setDraftRecurrence(e.target.value as ReminderRecurrence)
                       }
-                      className="flex-1 bg-transparent font-mono text-[11px] text-[var(--sat-muted)] outline-none"
+                      className="flex-1 bg-transparent font-mono text-[11px] text-[color:var(--sat-muted)] outline-none"
                     >
                       {(
                         Object.keys(RECURRENCE_LABELS) as ReminderRecurrence[]
@@ -297,7 +297,7 @@ export function CalendarSatellite({ sat }: { sat: Satellite }) {
                     </select>
                     <button
                       onClick={submitReminder}
-                      className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--sat-muted)] transition hover:text-[var(--sat-ink)]"
+                      className="font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--sat-muted)] transition hover:text-[color:var(--sat-ink)]"
                     >
                       add
                     </button>
@@ -309,7 +309,7 @@ export function CalendarSatellite({ sat }: { sat: Satellite }) {
 
           <ul className="flex flex-col gap-0.5 overflow-y-auto scroll-thin">
             {selectedReminders.length === 0 && !composing && (
-              <li className="text-[11.5px] text-[var(--sat-faint)] font-mono italic">
+              <li className="text-[11.5px] text-[color:var(--sat-faint)] font-mono italic">
                 Sin recordatorios para este día.
               </li>
             )}
@@ -318,14 +318,14 @@ export function CalendarSatellite({ sat }: { sat: Satellite }) {
               return (
                 <li
                   key={r.id}
-                  className="group flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-white/4"
+                  className="group flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-[var(--sat-hover)]"
                 >
-                  <span className="h-1 w-1 shrink-0 rounded-full bg-[var(--sat-ink)]" />
+                  <span className="h-1 w-1 shrink-0 rounded-full bg-[var(--sat-accent)]" />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[12.5px] text-[var(--sat-ink)]">
+                    <span className="block truncate text-[12.5px] text-[color:var(--sat-ink)]">
                       {r.text}
                     </span>
-                    <span className="flex items-center gap-1 font-mono text-[10px] text-[var(--sat-faint)]">
+                    <span className="flex items-center gap-1 font-mono text-[10px] text-[color:var(--sat-faint)]">
                       {r.time}
                       {badge ? (
                         <>

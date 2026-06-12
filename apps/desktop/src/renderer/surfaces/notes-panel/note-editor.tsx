@@ -118,7 +118,8 @@ export function NoteEditor() {
   return (
     <article className="note-editor-shell">
       <div className="note-editor-scroll scroll-thin">
-        <div className="note-document">
+        {/* key por nota: re-monta el documento y dispara la animación de entrada */}
+        <div className="note-document" key={activeNote.id}>
           <aside aria-label="Detalles de la nota" className="note-folio">
             <div className="folio-number">{folio}</div>
             <div className="folio-rule" />

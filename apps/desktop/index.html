@@ -1,9 +1,40 @@
 <!doctype html>
-<html lang="en">
+<html lang="es" data-theme="grafito" data-accent="violeta">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Gravity</title>
+    <title>Gravity Notes</title>
+    <script>
+      // Aplica tema y acento guardados antes del primer pintado para
+      // evitar un destello con la apariencia por defecto.
+      try {
+        var root = document.documentElement;
+        var theme = localStorage.getItem("gravity.appearance.theme");
+        var accent = localStorage.getItem("gravity.appearance.accent");
+        if (
+          theme === "porcelana" ||
+          theme === "cristal" ||
+          theme === "cristal-noche"
+        ) {
+          root.dataset.theme = theme;
+        }
+        if (["azul", "menta", "ambar", "rosa"].indexOf(accent) !== -1) {
+          root.dataset.accent = accent;
+        } else if (accent === "custom") {
+          root.dataset.accent = "custom";
+          var raw = localStorage.getItem("gravity.appearance.accent-custom");
+          if (raw) {
+            var c = JSON.parse(raw);
+            if (typeof c.h === "number" && typeof c.s === "number") {
+              root.style.setProperty("--accent-h", String(c.h));
+              root.style.setProperty("--accent-s", c.s + "%");
+            }
+          }
+        }
+      } catch (error) {
+        /* almacenamiento no disponible */
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

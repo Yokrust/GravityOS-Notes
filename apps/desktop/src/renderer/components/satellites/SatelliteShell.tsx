@@ -26,15 +26,20 @@ export function SatelliteShell({
   title,
   leftSlot,
   footerSlot,
+  onClose,
+  resizable = false,
   children
 }: {
   sat: Satellite;
   title: string;
   leftSlot?: React.ReactNode;
   footerSlot?: React.ReactNode;
+  onClose?: () => void;
+  resizable?: boolean;
   children: React.ReactNode;
 }) {
-  const { closeSatellite, moveSatellite, focusSatellite } = useStore();
+  const { closeSatellite, moveSatellite, resizeSatellite, focusSatellite } =
+    useStore();
   const controls = useDragControls();
   const ref = useRef<HTMLDivElement | null>(null);
   const canvas = useCanvasRef();
@@ -48,6 +53,32 @@ export function SatelliteShell({
     x.set(sat.x);
     y.set(sat.y);
   }, [sat.x, sat.y, x, y]);
+
+  // En modo redimensionable el grip nativo (resize: both) cambia el tamaño
+  // del nodo; observamos el cambio y lo persistimos con debounce. Medimos el
+  // border-box de layout: contentRect descuenta los bordes y los rects con
+  // transform capturan la animación de entrada — ambos retroalimentan
+  // tamaños equivocados al store.
+  useEffect(() => {
+    if (!resizable || !ref.current) return;
+    let timeoutId: number | null = null;
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry) return;
+      const box = entry.borderBoxSize?.[0];
+      const width = Math.round(box ? box.inlineSize : entry.contentRect.width);
+      const height = Math.round(box ? box.blockSize : entry.contentRect.height);
+      if (width === sat.width && height === sat.height) return;
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(() => {
+        resizeSatellite(sat.id, width, height);
+      }, 120);
+    });
+    observer.observe(ref.current);
+    return () => {
+      observer.disconnect();
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+    };
+  }, [resizable, resizeSatellite, sat.height, sat.id, sat.width]);
 
   return (
     <motion.div
@@ -73,7 +104,16 @@ export function SatelliteShell({
         zIndex: sat.z,
         // top: 0 / left: 0 baseline so that x/y act as absolute coords
         top: 0,
-        left: 0
+        left: 0,
+        ...(resizable
+          ? {
+              minWidth: 280,
+              minHeight: 240,
+              maxWidth: 640,
+              maxHeight: 760,
+              resize: "both" as const
+            }
+          : {})
       }}
       onDragEnd={() => {
         // x and y are already clamped by dragConstraints — just persist.
@@ -92,7 +132,7 @@ export function SatelliteShell({
         </div>
         <button
           onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => closeSatellite(sat.id)}
+          onClick={() => (onClose ? onClose() : closeSatellite(sat.id))}
           className="sat-icon-btn ml-auto z-[1]"
           title="Cerrar"
         >
@@ -101,7 +141,7 @@ export function SatelliteShell({
       </div>
       <div className="flex-1 min-h-0 flex flex-col">{children}</div>
       {footerSlot && (
-        <div className="relative border-t border-[var(--sat-line)] px-3 py-1.5 text-[10.5px] font-mono text-[var(--sat-muted)] flex items-center justify-between">
+        <div className="relative border-t border-[var(--sat-line)] px-3 py-1.5 text-[10.5px] font-mono text-[color:var(--sat-muted)] flex items-center justify-between">
           {footerSlot}
         </div>
       )}

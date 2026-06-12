@@ -276,6 +276,89 @@ type AppWorkspaceCommand =
   | { type: "emptyTrash" }
   | { type: "refresh" };
 
+type SatelliteValueType =
+  | "shortText"
+  | "longText"
+  | "number"
+  | "date"
+  | "singleSelect"
+  | "multiSelect"
+  | "checkbox"
+  | "progress"
+  | "image";
+
+type SatelliteValue =
+  | string
+  | number
+  | boolean
+  | string[]
+  | { imageId: string };
+
+interface CustomSatelliteProperty {
+  id: string;
+  key: string;
+  label: string;
+  valueType: SatelliteValueType;
+  required: boolean;
+  options?: string[];
+  defaultValue?: SatelliteValue;
+}
+
+interface CustomSatelliteProposal {
+  name: string;
+  description?: string;
+  icon: string;
+  color: string;
+  appearance: "card";
+  properties: Array<Omit<CustomSatelliteProperty, "id">>;
+}
+
+interface CustomSatelliteType {
+  id: string;
+  name: string;
+  description?: string;
+  icon: string;
+  color: string;
+  appearance: "card";
+  properties: CustomSatelliteProperty[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface CustomSatelliteInstance {
+  id: string;
+  customTypeId: string;
+  data: Record<string, SatelliteValue>;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  z: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface CustomSatelliteState {
+  customTypes: CustomSatelliteType[];
+  instances: CustomSatelliteInstance[];
+}
+
+interface AppearancePreferences {
+  harmony:
+    | "complementary"
+    | "singleAnalogous"
+    | "splitComplementary"
+    | "analogous"
+    | "triadic"
+    | "floating";
+  opacity: number;
+  points: Array<{ x: number; y: number }>;
+  rotation: number;
+  scheme: "auto" | "light" | "dark";
+  texture: number;
+  version: 1;
+}
+
 contextBridge.exposeInMainWorld("gravity", {
   getBootstrapStatus: async () =>
     ipcRenderer.invoke("app:get-bootstrap-status") as Promise<{
@@ -375,6 +458,65 @@ contextBridge.exposeInMainWorld("gravity", {
       content,
       targetFolderPath
     ) as Promise<MapDocumentDraft>,
+  getAppearancePreferences: async () =>
+    ipcRenderer.invoke(
+      "appearance:get-preferences"
+    ) as Promise<AppearancePreferences>,
+  saveAppearancePreferences: async (preferences: AppearancePreferences) =>
+    ipcRenderer.invoke(
+      "appearance:save-preferences",
+      preferences
+    ) as Promise<AppearancePreferences>,
+  getCustomSatelliteState: async () =>
+    ipcRenderer.invoke(
+      "custom-satellites:get-state"
+    ) as Promise<CustomSatelliteState>,
+  generateCustomSatellite: async (description: string) =>
+    ipcRenderer.invoke(
+      "custom-satellites:generate",
+      description
+    ) as Promise<CustomSatelliteProposal>,
+  confirmCustomSatellite: async (proposal: CustomSatelliteProposal) =>
+    ipcRenderer.invoke(
+      "custom-satellites:confirm",
+      proposal
+    ) as Promise<CustomSatelliteState>,
+  createCustomSatelliteInstance: async (input: {
+    customTypeId: string;
+    x?: number;
+    y?: number;
+    z?: number;
+  }) =>
+    ipcRenderer.invoke(
+      "custom-satellites:create-instance",
+      input
+    ) as Promise<CustomSatelliteState>,
+  updateCustomSatelliteValue: async (input: {
+    instanceId: string;
+    key: string;
+    value: SatelliteValue;
+  }) =>
+    ipcRenderer.invoke(
+      "custom-satellites:update-value",
+      input
+    ) as Promise<CustomSatelliteState>,
+  updateCustomSatelliteFrame: async (input: {
+    instanceId: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    z: number;
+  }) =>
+    ipcRenderer.invoke(
+      "custom-satellites:update-frame",
+      input
+    ) as Promise<CustomSatelliteState>,
+  closeCustomSatelliteInstance: async (instanceId: string) =>
+    ipcRenderer.invoke(
+      "custom-satellites:close-instance",
+      instanceId
+    ) as Promise<CustomSatelliteState>,
   getAuthState: async () =>
     ipcRenderer.invoke("auth:get-state") as Promise<AuthStateRecord>,
   saveProviderApiKey: async (providerId: string, apiKey: string) =>

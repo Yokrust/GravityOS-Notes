@@ -5,12 +5,15 @@ import {
   AuthStorage,
   NodeFilesystemAdapter,
   PiAuthAdapter,
+  PiCustomSatelliteGenerator,
   PiRuntimeAdapter,
   SqlitePersistenceAdapter
 } from "@gravity/adapters";
 import {
+  AppearancePreferencesService,
   AuthService,
   AppWorkspaceService,
+  CustomSatelliteService,
   MapService,
   NotesService,
   ProjectService,
@@ -26,6 +29,7 @@ import {
   type ProjectState,
   type RunPanelState
 } from "@gravity/application";
+import type { CustomSatelliteProposal, SatelliteValue } from "@gravity/domain";
 
 import { resetDemoProject } from "../demo/demo-folder-system.js";
 import {
@@ -132,6 +136,25 @@ const threadPanel = new ThreadPanelService(
 );
 const projects = new ProjectService(ids, filesystem, maps, persistence);
 const notes = new NotesService(filesystem, persistence);
+const appearancePreferences = new AppearancePreferencesService(persistence);
+
+// Los ids de Satellites custom sobreviven reinicios: el generador secuencial
+// en memoria colisionaría con filas ya persistidas, así que usamos sufijos
+// únicos por marca de tiempo.
+const persistentIds = {
+  next(prefix: string) {
+    const suffix = `${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+    return `${prefix}-${suffix}`;
+  }
+};
+const customSatellites = new CustomSatelliteService(
+  clock,
+  persistentIds,
+  persistence,
+  new PiCustomSatelliteGenerator({ authStorage })
+);
 const workspace = new AppWorkspaceService({
   projects,
   runPanel,
@@ -294,6 +317,55 @@ export function registerAppIpc(): void {
         rootPath,
         ...(targetFolderPath ? { targetFolderPath } : {})
       })
+  );
+  ipcMain.handle("appearance:get-preferences", async () =>
+    appearancePreferences.hydrate()
+  );
+  ipcMain.handle("appearance:save-preferences", async (_, input: unknown) =>
+    appearancePreferences.save(input)
+  );
+  ipcMain.handle("custom-satellites:get-state", async () =>
+    customSatellites.hydrate()
+  );
+  ipcMain.handle("custom-satellites:generate", async (_, description: string) =>
+    customSatellites.generate(description)
+  );
+  ipcMain.handle(
+    "custom-satellites:confirm",
+    async (_, proposal: CustomSatelliteProposal) =>
+      customSatellites.confirm(proposal)
+  );
+  ipcMain.handle(
+    "custom-satellites:create-instance",
+    async (
+      _,
+      input: { customTypeId: string; x?: number; y?: number; z?: number }
+    ) => customSatellites.createInstance(input)
+  );
+  ipcMain.handle(
+    "custom-satellites:update-value",
+    async (
+      _,
+      input: { instanceId: string; key: string; value: SatelliteValue }
+    ) => customSatellites.updateInstanceValue(input)
+  );
+  ipcMain.handle(
+    "custom-satellites:update-frame",
+    async (
+      _,
+      input: {
+        instanceId: string;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        z: number;
+      }
+    ) => customSatellites.updateInstanceFrame(input)
+  );
+  ipcMain.handle(
+    "custom-satellites:close-instance",
+    async (_, instanceId: string) => customSatellites.closeInstance(instanceId)
   );
   ipcMain.handle("auth:get-state", async () =>
     serializeAuthState(await authService.hydrate())
