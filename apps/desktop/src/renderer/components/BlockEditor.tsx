@@ -450,9 +450,16 @@ export function BlockEditor({
                   anchor={slash.rect}
                   onClose={() => setSlash(null)}
                   onSelect={(option) => {
-                    changeType(slash.blockId, option.key as BlockType);
+                    const type = option.key as BlockType;
+                    changeType(slash.blockId, type);
                     setSlash(null);
-                    setFocusId(slash.blockId);
+                    if (type === "divider") {
+                      // A divider is not editable, so drop an empty paragraph
+                      // after it and focus there to keep writing.
+                      insertAfter(slash.blockId, "p");
+                    } else {
+                      setFocusId(slash.blockId);
+                    }
                   }}
                   query={slash.query}
                 />
@@ -623,6 +630,11 @@ function BlockView({
               onUpdate({ checked: checked ?? false, text: "", type: nextType });
             } else {
               onUpdate({ text: "", type: nextType });
+            }
+            if (nextType === "divider") {
+              // The divider block is not editable; add an empty paragraph after
+              // it and focus it so writing can continue below the line.
+              onInsertAfter("p");
             }
           });
           return;
@@ -800,29 +812,10 @@ function TableBlock({
                     } ${rowIndex === 0 ? "bg-[color:var(--accent-soft)]" : ""}`}
                     key={columnIndex}
                   >
-                    <div
-                      className={`min-w-[110px] px-3 py-1.5 text-[14px] outline-none ${
-                        rowIndex === 0
-                          ? "font-display text-[13.5px] font-semibold"
-                          : ""
-                      }`}
-                      contentEditable
-                      dangerouslySetInnerHTML={{ __html: cell }}
-                      onBlur={(event) =>
-                        setCell(
-                          rowIndex,
-                          columnIndex,
-                          event.currentTarget.textContent ?? ""
-                        )
-                      }
-                      onInput={(event) =>
-                        setCell(
-                          rowIndex,
-                          columnIndex,
-                          event.currentTarget.textContent ?? ""
-                        )
-                      }
-                      suppressContentEditableWarning
+                    <TableCell
+                      isHeader={rowIndex === 0}
+                      onCommit={(text) => setCell(rowIndex, columnIndex, text)}
+                      value={cell}
                     />
                   </td>
                 ))}
@@ -848,6 +841,41 @@ function TableBlock({
         </button>
       </div>
     </motion.div>
+  );
+}
+
+function TableCell({
+  isHeader,
+  onCommit,
+  value
+}: {
+  isHeader: boolean;
+  onCommit: (text: string) => void;
+  value: string;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  // Mirror the block editor: only write the cell text when it actually differs
+  // from the DOM, so committing on input never resets the caret to the start
+  // (which made typed characters appear reversed).
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (element && element.textContent !== value) {
+      element.textContent = value;
+    }
+  }, [value]);
+
+  return (
+    <div
+      className={`min-w-[110px] px-3 py-1.5 text-[14px] outline-none ${
+        isHeader ? "font-display text-[13.5px] font-semibold" : ""
+      }`}
+      contentEditable
+      onBlur={(event) => onCommit(event.currentTarget.textContent ?? "")}
+      onInput={(event) => onCommit(event.currentTarget.textContent ?? "")}
+      ref={ref}
+      suppressContentEditableWarning
+    />
   );
 }
 
