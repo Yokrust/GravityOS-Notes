@@ -1,9 +1,11 @@
 import { Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { BlockEditor } from "../../components/BlockEditor.js";
+import {
+  BlockEditor,
+  inlineMarkdownToPlainText
+} from "../../components/BlockEditor.js";
 import { useStore } from "../../lib/store.js";
-import type { FileNode } from "../../lib/types.js";
 
 function formatRelative(timestamp: number) {
   const diff = Date.now() - timestamp;
@@ -24,7 +26,6 @@ export function NoteEditor() {
     notebookRoot,
     notesLoading,
     renameNode,
-    tree,
     updateContent
   } = useStore();
   const [title, setTitle] = useState(activeNote?.name ?? "");
@@ -68,23 +69,16 @@ export function NoteEditor() {
   }, [activeNote, renameNode, title]);
 
   const stats = useMemo(() => {
-    const plain = content.replace(/[[\]#>*`-]/g, "");
+    const plain = inlineMarkdownToPlainText(content).replace(
+      /[[\]#>*`+=~{}-]/g,
+      ""
+    );
     const words = plain.trim() ? plain.trim().split(/\s+/).length : 0;
     return {
       chars: plain.length,
       words
     };
   }, [content]);
-  const noteEntries = useMemo(() => collectNotes(tree), [tree]);
-  const activeEntry = noteEntries.find(
-    (entry) => entry.node.id === activeNote?.id
-  );
-  const folio = Math.max(
-    1,
-    noteEntries.findIndex((entry) => entry.node.id === activeNote?.id) + 1
-  )
-    .toString()
-    .padStart(2, "0");
 
   if (!activeNote) {
     return (
@@ -100,8 +94,8 @@ export function NoteEditor() {
           </h1>
           <p>
             {notebookRoot
-              ? "Elige un archivo Markdown del árbol o crea una nota nueva."
-              : "Gravity reflejará sus carpetas y archivos .md sin importar ni duplicar contenido."}
+              ? "Elige una nota del árbol o crea una nueva."
+              : "Conecta una carpeta y empieza a escribir."}
           </p>
           <button
             onClick={notebookRoot ? () => addNote() : chooseNotebookRoot}
@@ -120,15 +114,6 @@ export function NoteEditor() {
       <div className="note-editor-scroll scroll-thin">
         {/* key por nota: re-monta el documento y dispara la animación de entrada */}
         <div className="note-document" key={activeNote.id}>
-          <aside aria-label="Detalles de la nota" className="note-folio">
-            <div className="folio-number">{folio}</div>
-            <div className="folio-rule" />
-            <div className="folio-label">Notebook</div>
-            <div className="folio-path">
-              {activeEntry?.path.join(" / ") ?? activeNote.name}
-            </div>
-          </aside>
-
           <div className="note-page">
             <header className="note-header">
               <div className="note-date">
@@ -171,17 +156,4 @@ export function NoteEditor() {
       </div>
     </article>
   );
-}
-
-function collectNotes(
-  nodes: FileNode[],
-  parents: string[] = []
-): Array<{ node: FileNode; path: string[] }> {
-  return nodes.flatMap((node) => {
-    if (node.type === "note") {
-      return [{ node, path: [...parents, node.name] }];
-    }
-
-    return collectNotes(node.children ?? [], [...parents, node.name]);
-  });
 }

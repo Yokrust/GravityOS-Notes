@@ -157,13 +157,26 @@ export function AppearanceProvider({
       // emit invalid CSS (e.g. `hsl(... undefined%)`), which would blank the
       // accent instead of applying the chosen color.
       const customAccent = normalizeCustomAccent(preferences.customAccent);
+      // Preset accents carry separate light/dark lightness so they stay legible
+      // on every theme. A free color has a single lightness, so a near-black or
+      // near-white pick vanishes against a same-polarity background. Clamp the
+      // chosen lightness into a visible band for the active theme and derive an
+      // ink that contrasts the result — preserving the color while keeping it
+      // readable.
+      const visibleL = visibleAccentLightness(
+        theme,
+        customAccent.l,
+        customAccent.s
+      );
       root.style.setProperty("--accent-h", String(customAccent.h));
       root.style.setProperty("--accent-s", `${customAccent.s}%`);
-      root.style.setProperty("--accent-l", `${customAccent.l}%`);
+      root.style.setProperty("--accent-l", `${visibleL}%`);
+      root.style.setProperty("--accent-ink", accentInkForLightness(visibleL));
     } else {
       root.style.removeProperty("--accent-h");
       root.style.removeProperty("--accent-s");
       root.style.removeProperty("--accent-l");
+      root.style.removeProperty("--accent-ink");
     }
     applyAmbientTheme(
       root,
@@ -335,6 +348,26 @@ function readCustomAccent(): CustomAccent {
   } catch {
     return { ...DEFAULT_CUSTOM_ACCENT };
   }
+}
+
+const LIGHT_THEMES = new Set<ThemeId>(["porcelana", "cristal"]);
+
+/** Clamp a free accent's lightness into a band that stays legible on the active
+ *  theme: dark themes need a light-enough accent, light themes a dark-enough
+ *  one. The band is saturation-aware — a vivid color already carries contrast,
+ *  so it keeps its lightness, while a near-grey gets pushed firmly into the
+ *  readable range. Hue and saturation are never altered. */
+function visibleAccentLightness(theme: ThemeId, l: number, s: number): number {
+  const headroom = Math.round((Math.min(100, Math.max(0, s)) / 100) * 12);
+  return LIGHT_THEMES.has(theme)
+    ? Math.min(Math.max(l, 16), 44 + headroom)
+    : Math.max(Math.min(l, 88), 60 - headroom);
+}
+
+/** Ink (text/icons) drawn on top of the accent fill: light accent → dark ink,
+ *  dark accent → light ink, so buttons and checks stay readable. */
+function accentInkForLightness(l: number): string {
+  return l >= 58 ? "#10101a" : "#ffffff";
 }
 
 function normalizeCustomAccent(input: Partial<CustomAccent>): CustomAccent {

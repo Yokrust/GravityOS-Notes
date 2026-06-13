@@ -403,6 +403,18 @@ export function createInMemoryPersistence(
           }
         : null;
     },
+    async deleteCustomSatelliteType(customTypeId) {
+      customSatelliteTypes.delete(customTypeId);
+      for (const [instanceId, instance] of customSatelliteInstances) {
+        if (instance.customTypeId !== customTypeId) continue;
+        customSatelliteInstances.delete(instanceId);
+        for (const [imageId, image] of customSatelliteImages) {
+          if (image.instanceId === instanceId) {
+            customSatelliteImages.delete(imageId);
+          }
+        }
+      }
+    },
     async deleteCustomSatelliteInstance(instanceId) {
       customSatelliteInstances.delete(instanceId);
       for (const [imageId, image] of customSatelliteImages) {

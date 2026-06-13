@@ -201,6 +201,18 @@ describe("custom satellite persistence", () => {
     ).toHaveLength(0);
   });
 
+  it("deletes a custom type together with every persisted instance", async () => {
+    const { persistence, service } = createCustomSatelliteTestContext();
+
+    const state = await service.deleteType("custom-satellite-type-1");
+
+    expect(state).toEqual({ customTypes: [], instances: [] });
+    await expect(persistence.loadState()).resolves.toMatchObject({
+      customSatelliteTypes: [],
+      customSatelliteInstances: []
+    });
+  });
+
   it("persists null when an optional field is cleared", async () => {
     const { persistence, service } = createCustomSatelliteTestContext();
 

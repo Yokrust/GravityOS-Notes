@@ -1,16 +1,32 @@
 import {
+  Bold,
   CheckSquare,
   Code2,
+  CodeXml,
+  GripVertical,
   Heading1,
   Heading2,
   Heading3,
+  Highlighter,
+  Italic,
   List,
+  Link2,
   Minus,
   Quote,
+  RemoveFormatting,
+  Strikethrough,
   Table as TableIcon,
-  Type
+  Trash2,
+  Type,
+  Underline
 } from "lucide-react";
-import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
+import hljs from "highlight.js/lib/common";
+import type {
+  FormEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
+  ReactNode
+} from "react";
 import { createPortal } from "react-dom";
 import {
   useCallback,
@@ -44,6 +60,7 @@ export interface Block {
   type: BlockType;
   text: string;
   checked?: boolean;
+  language?: string | undefined;
   rows?: string[][];
 }
 
@@ -74,7 +91,8 @@ export function parseMarkdown(src: string): Block[] {
     const line = lines[index];
     if (line === undefined) break;
 
-    if (/^```/.test(line)) {
+    const codeFence = line.match(/^```([A-Za-z0-9_+#.-]*)\s*$/);
+    if (codeFence) {
       index += 1;
       const buffer: string[] = [];
       while (index < lines.length && !/^```/.test(lines[index] ?? "")) {
@@ -82,7 +100,13 @@ export function parseMarkdown(src: string): Block[] {
         index += 1;
       }
       if (index < lines.length) index += 1;
-      blocks.push({ id: uid(), type: "code", text: buffer.join("\n") });
+      const language = normalizeCodeLanguage(codeFence[1] ?? "");
+      blocks.push({
+        id: uid(),
+        type: "code",
+        text: buffer.join("\n"),
+        ...(language ? { language } : {})
+      });
       continue;
     }
 
@@ -129,7 +153,7 @@ export function parseMarkdown(src: string): Block[] {
       blocks.push({
         id: uid(),
         type: `h${level}` as "h1" | "h2" | "h3",
-        text: stripMarkdown(heading[2] ?? "")
+        text: heading[2] ?? ""
       });
       index += 1;
       continue;
@@ -139,7 +163,7 @@ export function parseMarkdown(src: string): Block[] {
       blocks.push({
         id: uid(),
         type: "quote",
-        text: stripMarkdown(line.replace(/^>\s+/, ""))
+        text: line.replace(/^>\s+/, "")
       });
       index += 1;
       continue;
@@ -150,7 +174,7 @@ export function parseMarkdown(src: string): Block[] {
       blocks.push({
         id: uid(),
         type: "todo",
-        text: stripMarkdown(todo[2] ?? ""),
+        text: todo[2] ?? "",
         checked: (todo[1] ?? "").toLowerCase() === "x"
       });
       index += 1;
@@ -161,7 +185,7 @@ export function parseMarkdown(src: string): Block[] {
       blocks.push({
         id: uid(),
         type: "bullet",
-        text: stripMarkdown(line.replace(/^[-*]\s+/, ""))
+        text: line.replace(/^[-*]\s+/, "")
       });
       index += 1;
       continue;
@@ -172,18 +196,257 @@ export function parseMarkdown(src: string): Block[] {
       continue;
     }
 
-    blocks.push({ id: uid(), type: "p", text: stripMarkdown(line) });
+    blocks.push({ id: uid(), type: "p", text: line });
     index += 1;
   }
 
-  return blocks.length ? blocks : [emptyBlock()];
+  if (!blocks.length) return [emptyBlock()];
+  for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
+    if (blocks[blockIndex]?.type !== "table") continue;
+    if (blockIndex === 0 || isStructuralBlock(blocks[blockIndex - 1])) {
+      blocks.splice(blockIndex, 0, emptyBlock());
+      blockIndex += 1;
+    }
+    if (
+      blockIndex === blocks.length - 1 ||
+      isStructuralBlock(blocks[blockIndex + 1])
+    ) {
+      blocks.splice(blockIndex + 1, 0, emptyBlock());
+    }
+  }
+  if (blocks.at(-1)?.type === "divider") blocks.push(emptyBlock());
+  return blocks;
 }
 
-function stripMarkdown(value: string): string {
+export function inlineMarkdownToPlainText(value: string): string {
   return value
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
+    .replace(/==\{(?:yellow|green|blue|pink|purple)\}(.+?)==/g, "$1")
+    .replace(/==(.+?)==/g, "$1")
+    .replace(/\*\*\*(.+?)\*\*\*/g, "$1")
     .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/~~(.+?)~~/g, "$1")
+    .replace(/\+\+(.+?)\+\+/g, "$1")
     .replace(/\*(.+?)\*/g, "$1")
     .replace(/`([^`]+)`/g, "$1");
+}
+
+const INLINE_HIGHLIGHT_COLORS = [
+  "yellow",
+  "green",
+  "blue",
+  "pink",
+  "purple"
+] as const;
+
+type InlineHighlightColor = (typeof INLINE_HIGHLIGHT_COLORS)[number];
+
+const escapeInlineHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
+export function normalizeInlineLink(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const candidate = /^[a-z][a-z0-9+.-]*:/i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+  try {
+    const url = new URL(candidate);
+    return ["http:", "https:", "mailto:"].includes(url.protocol)
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function renderInlineMarkdown(value: string): string {
+  const placeholders: string[] = [];
+  const hold = (html: string) => {
+    const token = `\uE000${placeholders.length}\uE001`;
+    placeholders.push(html);
+    return token;
+  };
+
+  let html = value
+    .replace(/`([^`\n]+)`/g, (_, code: string) =>
+      hold(`<code>${escapeInlineHtml(code)}</code>`)
+    )
+    .replace(
+      /\[([^\]\n]+)\]\(([^)\n]+)\)/g,
+      (_, label: string, rawUrl: string) => {
+        const url = normalizeInlineLink(rawUrl);
+        return url
+          ? hold(
+              `<a href="${escapeInlineHtml(url)}" rel="noreferrer">${renderInlineMarkdown(label)}</a>`
+            )
+          : `${label} (${rawUrl})`;
+      }
+    );
+
+  html = escapeInlineHtml(html)
+    .replace(
+      /==\{(yellow|green|blue|pink|purple)\}(.+?)==/g,
+      '<mark data-highlight="$1">$2</mark>'
+    )
+    .replace(/==(.+?)==/g, '<mark data-highlight="yellow">$1</mark>')
+    .replace(/\*\*\*(.+?)\*\*\*/g, "<strong><em>$1</em></strong>")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/~~(.+?)~~/g, "<s>$1</s>")
+    .replace(/\+\+(.+?)\+\+/g, "<u>$1</u>")
+    .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
+    .replace(/\n/g, "<br>");
+
+  return html.replace(/\uE000(\d+)\uE001/g, (_, index: string) => {
+    return placeholders[Number(index)] ?? "";
+  });
+}
+
+function serializeInlineNode(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return (node.textContent ?? "").replace(/\u00a0/g, " ");
+  }
+  if (!(node instanceof HTMLElement)) return "";
+
+  const content = Array.from(node.childNodes).map(serializeInlineNode).join("");
+  switch (node.tagName) {
+    case "BR":
+      return "\n";
+    case "B":
+    case "STRONG":
+      return `**${content}**`;
+    case "I":
+    case "EM":
+      return `*${content}*`;
+    case "U":
+      return `++${content}++`;
+    case "S":
+    case "STRIKE":
+    case "DEL":
+      return `~~${content}~~`;
+    case "CODE":
+      return `\`${inlineMarkdownToPlainText(content)}\``;
+    case "A": {
+      const url = normalizeInlineLink(node.getAttribute("href") ?? "");
+      return url ? `[${content}](${url})` : content;
+    }
+    case "MARK": {
+      const color = node.dataset.highlight;
+      return color &&
+        INLINE_HIGHLIGHT_COLORS.includes(color as InlineHighlightColor)
+        ? `=={${color}}${content}==`
+        : `==${content}==`;
+    }
+    case "DIV":
+    case "P":
+      return `${content}\n`;
+    default:
+      return content;
+  }
+}
+
+export function serializeInlineContent(element: HTMLElement): string {
+  return Array.from(element.childNodes)
+    .map(serializeInlineNode)
+    .join("")
+    .replace(/\n{2,}/g, "\n")
+    .replace(/\n$/, "");
+}
+
+type InlineFormat =
+  | "bold"
+  | "code"
+  | "italic"
+  | "link"
+  | "strike"
+  | "underline";
+
+interface InlineSelectionState {
+  blockId: string;
+  formats: InlineFormat[];
+  rect: { bottom: number; left: number; top: number; width: number };
+}
+
+function elementFromNode(node: Node | null): HTMLElement | null {
+  if (!node) return null;
+  return node instanceof HTMLElement ? node : node.parentElement;
+}
+
+function closestInlineElement(
+  range: Range,
+  editor: HTMLElement,
+  selector: string
+): HTMLElement | null {
+  const element = elementFromNode(range.commonAncestorContainer);
+  const match = element?.closest<HTMLElement>(selector) ?? null;
+  return match && editor.contains(match) ? match : null;
+}
+
+function replaceRangeSelection(range: Range, node: Node) {
+  range.deleteContents();
+  range.insertNode(node);
+  const nextRange = document.createRange();
+  nextRange.selectNodeContents(node);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(nextRange);
+  return nextRange;
+}
+
+function unwrapInlineElement(element: HTMLElement): Range | null {
+  const parent = element.parentNode;
+  const first = element.firstChild;
+  const last = element.lastChild;
+  if (!parent || !first || !last) return null;
+
+  while (element.firstChild) {
+    parent.insertBefore(element.firstChild, element);
+  }
+  element.remove();
+
+  const range = document.createRange();
+  range.setStartBefore(first);
+  range.setEndAfter(last);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  return range;
+}
+
+function toggleInlineElement(
+  range: Range,
+  editor: HTMLElement,
+  tagName: "code"
+): Range | null {
+  const existing = closestInlineElement(range, editor, tagName);
+  if (existing) return unwrapInlineElement(existing);
+
+  const wrapper = document.createElement(tagName);
+  wrapper.append(range.extractContents());
+  return replaceRangeSelection(range, wrapper);
+}
+
+function applyHighlight(
+  range: Range,
+  editor: HTMLElement,
+  color: InlineHighlightColor | null
+): Range | null {
+  const existing = closestInlineElement(range, editor, "mark");
+  if (!color) return existing ? unwrapInlineElement(existing) : range;
+  if (existing) {
+    existing.dataset.highlight = color;
+    return range;
+  }
+
+  const mark = document.createElement("mark");
+  mark.dataset.highlight = color;
+  mark.append(range.extractContents());
+  return replaceRangeSelection(range, mark);
 }
 
 export function serializeBlocks(blocks: Block[]): string {
@@ -213,7 +476,7 @@ export function serializeBlocks(blocks: Block[]): string {
         output.push(`- [${block.checked ? "x" : " "}] ${block.text}`);
         break;
       case "code":
-        output.push("```", block.text, "```", "");
+        output.push(`\`\`\`${block.language ?? ""}`, block.text, "```", "");
         break;
       case "divider":
         output.push("---", "");
@@ -238,6 +501,236 @@ export function serializeBlocks(blocks: Block[]): string {
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+export function replaceBlockWithDivider(
+  blocks: Block[],
+  id: string,
+  trailingBlock: Block
+): Block[] {
+  const index = blocks.findIndex((block) => block.id === id);
+  if (index < 0) return blocks;
+
+  const divider: Block = {
+    id,
+    type: "divider",
+    text: ""
+  };
+
+  return [
+    ...blocks.slice(0, index),
+    divider,
+    trailingBlock,
+    ...blocks.slice(index + 1)
+  ];
+}
+
+export function replaceBlockWithTable(
+  blocks: Block[],
+  id: string,
+  table: Block,
+  leadingBlock: Block,
+  trailingBlock: Block
+): Block[] {
+  const index = blocks.findIndex((block) => block.id === id);
+  if (index < 0) return blocks;
+
+  const previous = blocks[index - 1];
+  const next = blocks[index + 1];
+  return [
+    ...blocks.slice(0, index),
+    ...(previous && !isStructuralBlock(previous) ? [] : [leadingBlock]),
+    { ...table, id },
+    ...(next && !isStructuralBlock(next) ? [] : [trailingBlock]),
+    ...blocks.slice(index + 1)
+  ];
+}
+
+export function deleteEmptyBlock(
+  blocks: Block[],
+  id: string,
+  fallbackBlock: Block
+): { blocks: Block[]; focusId: string | null } {
+  const index = blocks.findIndex((block) => block.id === id);
+  if (index < 0) return { blocks, focusId: null };
+
+  const previous = blocks[index - 1];
+  if (previous && isStructuralBlock(previous)) {
+    return {
+      blocks: [...blocks.slice(0, index - 1), ...blocks.slice(index)],
+      focusId: id
+    };
+  }
+
+  const next = [...blocks.slice(0, index), ...blocks.slice(index + 1)];
+  if (!next.length) next.push(fallbackBlock);
+  return {
+    blocks: next,
+    focusId: next[Math.max(0, index - 1)]?.id ?? null
+  };
+}
+
+function isStructuralBlock(block: Block | undefined): boolean {
+  return block?.type === "divider" || block?.type === "table";
+}
+
+const TABLE_MIN_ROWS = 2;
+const TABLE_MAX_ROWS = 12;
+const TABLE_MIN_COLUMNS = 2;
+const TABLE_MAX_COLUMNS = 8;
+const TABLE_COLUMN_DRAG_STEP = 120;
+const TABLE_ROW_DRAG_STEP = 38;
+
+const clamp = (value: number, minimum: number, maximum: number) =>
+  Math.min(maximum, Math.max(minimum, value));
+
+export function resizeTableGrid(
+  rows: string[][],
+  targetRows: number,
+  targetColumns: number
+): string[][] {
+  const rowCount = clamp(
+    Math.round(targetRows),
+    TABLE_MIN_ROWS,
+    TABLE_MAX_ROWS
+  );
+  const columnCount = clamp(
+    Math.round(targetColumns),
+    TABLE_MIN_COLUMNS,
+    TABLE_MAX_COLUMNS
+  );
+
+  return Array.from({ length: rowCount }, (_, rowIndex) =>
+    Array.from(
+      { length: columnCount },
+      (_, columnIndex) => rows[rowIndex]?.[columnIndex] ?? ""
+    )
+  );
+}
+
+export function resolveTableDragSize({
+  deltaX,
+  deltaY,
+  startColumns,
+  startRows
+}: {
+  deltaX: number;
+  deltaY: number;
+  startColumns: number;
+  startRows: number;
+}): { columns: number; rows: number } {
+  return {
+    columns: clamp(
+      startColumns + Math.round(deltaX / TABLE_COLUMN_DRAG_STEP),
+      TABLE_MIN_COLUMNS,
+      TABLE_MAX_COLUMNS
+    ),
+    rows: clamp(
+      startRows + Math.round(deltaY / TABLE_ROW_DRAG_STEP),
+      TABLE_MIN_ROWS,
+      TABLE_MAX_ROWS
+    )
+  };
+}
+
+export function moveBlockToIndex(
+  blocks: Block[],
+  blockId: string,
+  targetIndex: number
+): Block[] {
+  const sourceIndex = blocks.findIndex((block) => block.id === blockId);
+  if (sourceIndex < 0) return blocks;
+
+  const boundedTarget = clamp(Math.round(targetIndex), 0, blocks.length);
+  const insertionIndex =
+    boundedTarget > sourceIndex ? boundedTarget - 1 : boundedTarget;
+  if (insertionIndex === sourceIndex) return blocks;
+
+  const next = [...blocks];
+  const [movedBlock] = next.splice(sourceIndex, 1);
+  if (!movedBlock) return blocks;
+  next.splice(insertionIndex, 0, movedBlock);
+  return next;
+}
+
+const CODE_LANGUAGE_OPTIONS = [
+  { label: "Automático", value: "" },
+  { label: "JavaScript", value: "javascript" },
+  { label: "TypeScript", value: "typescript" },
+  { label: "Python", value: "python" },
+  { label: "HTML", value: "xml" },
+  { label: "CSS", value: "css" },
+  { label: "JSON", value: "json" },
+  { label: "Bash", value: "bash" },
+  { label: "SQL", value: "sql" },
+  { label: "Java", value: "java" },
+  { label: "C#", value: "csharp" },
+  { label: "C++", value: "cpp" },
+  { label: "Rust", value: "rust" },
+  { label: "Go", value: "go" },
+  { label: "Markdown", value: "markdown" }
+] as const;
+
+const CODE_LANGUAGE_ALIASES: Record<string, string> = {
+  c: "c",
+  "c++": "cpp",
+  cs: "csharp",
+  "c#": "csharp",
+  html: "xml",
+  js: "javascript",
+  jsx: "javascript",
+  md: "markdown",
+  py: "python",
+  rb: "ruby",
+  rs: "rust",
+  sh: "bash",
+  shell: "bash",
+  ts: "typescript",
+  tsx: "typescript",
+  yml: "yaml"
+};
+
+function normalizeCodeLanguage(language: string): string | undefined {
+  const normalized = language.trim().toLowerCase();
+  if (!normalized) return undefined;
+  return CODE_LANGUAGE_ALIASES[normalized] ?? normalized;
+}
+
+export function highlightCode(
+  code: string,
+  language?: string
+): { html: string; language: string | null } {
+  const normalizedLanguage = normalizeCodeLanguage(language ?? "");
+  if (normalizedLanguage && hljs.getLanguage(normalizedLanguage)) {
+    return {
+      html: hljs.highlight(code, {
+        language: normalizedLanguage,
+        ignoreIllegals: true
+      }).value,
+      language: normalizedLanguage
+    };
+  }
+
+  const result = hljs.highlightAuto(code, [
+    "javascript",
+    "typescript",
+    "python",
+    "xml",
+    "css",
+    "json",
+    "bash",
+    "sql",
+    "java",
+    "csharp",
+    "cpp",
+    "rust",
+    "go",
+    "markdown"
+  ]);
+  return {
+    html: result.value,
+    language: result.language ?? null
+  };
 }
 
 interface SlashOption {
@@ -348,12 +841,20 @@ export function BlockEditor({
   onChange: (next: string) => void;
 }) {
   const [blocks, setBlocks] = useState<Block[]>(() => parseMarkdown(value));
-  const [focusId, setFocusId] = useState<string | null>(null);
+  const [focusRequest, setFocusRequest] = useState<{ id: string } | null>(null);
   const [slash, setSlash] = useState<{
     blockId: string;
     query: string;
     rect: { x: number; top: number; bottom: number };
   } | null>(null);
+  const [blockDrag, setBlockDrag] = useState<BlockDragState | null>(null);
+  const [inlineSelection, setInlineSelection] =
+    useState<InlineSelectionState | null>(null);
+  const blockDragRef = useRef<BlockDragState | null>(null);
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const inlineRangeRef = useRef<Range | null>(null);
+  const inlineToolbarRef = useRef<HTMLDivElement | null>(null);
+  const trashZoneRef = useRef<HTMLDivElement | null>(null);
   const lastExternal = useRef(value);
 
   useEffect(() => {
@@ -377,6 +878,212 @@ export function BlockEditor({
     );
   }, []);
 
+  useEffect(() => {
+    let animationFrame = 0;
+
+    const syncSelection = () => {
+      cancelAnimationFrame(animationFrame);
+      animationFrame = requestAnimationFrame(() => {
+        if (
+          inlineToolbarRef.current?.contains(
+            document.activeElement as Node | null
+          )
+        ) {
+          return;
+        }
+
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+          inlineRangeRef.current = null;
+          setInlineSelection(null);
+          return;
+        }
+
+        const range = selection.getRangeAt(0);
+        if (!range.toString().trim()) {
+          inlineRangeRef.current = null;
+          setInlineSelection(null);
+          return;
+        }
+
+        const startEditor = elementFromNode(
+          range.startContainer
+        )?.closest<HTMLElement>("[data-inline-editor-id]");
+        const endEditor = elementFromNode(
+          range.endContainer
+        )?.closest<HTMLElement>("[data-inline-editor-id]");
+        if (
+          !startEditor ||
+          startEditor !== endEditor ||
+          !editorRef.current?.contains(startEditor)
+        ) {
+          inlineRangeRef.current = null;
+          setInlineSelection(null);
+          return;
+        }
+
+        const bounds =
+          range.getBoundingClientRect().width > 0
+            ? range.getBoundingClientRect()
+            : range.getClientRects()[0];
+        if (!bounds) {
+          inlineRangeRef.current = null;
+          setInlineSelection(null);
+          return;
+        }
+
+        const formats: InlineFormat[] = [];
+        const formatSelectors: Array<[InlineFormat, string]> = [
+          ["bold", "b, strong"],
+          ["italic", "i, em"],
+          ["underline", "u"],
+          ["strike", "s, strike, del"],
+          ["code", "code"],
+          ["link", "a"]
+        ];
+        for (const [format, selector] of formatSelectors) {
+          if (closestInlineElement(range, startEditor, selector)) {
+            formats.push(format);
+          }
+        }
+
+        inlineRangeRef.current = range.cloneRange();
+        setInlineSelection({
+          blockId: startEditor.dataset.inlineEditorId ?? "",
+          formats,
+          rect: {
+            bottom: bounds.bottom,
+            left: bounds.left,
+            top: bounds.top,
+            width: bounds.width
+          }
+        });
+      });
+    };
+
+    const closeToolbar = (event: Event) => {
+      if (inlineToolbarRef.current?.contains(event.target as Node | null)) {
+        return;
+      }
+      inlineRangeRef.current = null;
+      setInlineSelection(null);
+    };
+
+    document.addEventListener("selectionchange", syncSelection);
+    document.addEventListener("scroll", closeToolbar, true);
+    window.addEventListener("resize", closeToolbar);
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      document.removeEventListener("selectionchange", syncSelection);
+      document.removeEventListener("scroll", closeToolbar, true);
+      window.removeEventListener("resize", closeToolbar);
+    };
+  }, []);
+
+  const applyInlineFormat = useCallback(
+    (
+      format: InlineFormat | "clear" | "highlight" | "remove-highlight",
+      value?: string
+    ) => {
+      const current = inlineSelection;
+      const savedRange = inlineRangeRef.current;
+      if (!current || !savedRange) return;
+
+      const editor = Array.from(
+        editorRef.current?.querySelectorAll<HTMLElement>(
+          "[data-inline-editor-id]"
+        ) ?? []
+      ).find(
+        (candidate) => candidate.dataset.inlineEditorId === current.blockId
+      );
+      if (!editor || !editor.contains(savedRange.commonAncestorContainer)) {
+        return;
+      }
+
+      editor.focus();
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(savedRange);
+
+      let nextRange: Range | null = savedRange;
+      if (
+        format === "bold" ||
+        format === "italic" ||
+        format === "underline" ||
+        format === "strike"
+      ) {
+        const command =
+          format === "strike"
+            ? "strikeThrough"
+            : format === "underline"
+              ? "underline"
+              : format;
+        document.execCommand(command);
+        nextRange =
+          window.getSelection()?.rangeCount === 1
+            ? (window.getSelection()?.getRangeAt(0).cloneRange() ?? savedRange)
+            : savedRange;
+      } else if (format === "code") {
+        nextRange = toggleInlineElement(savedRange, editor, "code");
+      } else if (format === "highlight") {
+        const color = INLINE_HIGHLIGHT_COLORS.includes(
+          value as InlineHighlightColor
+        )
+          ? (value as InlineHighlightColor)
+          : "yellow";
+        nextRange = applyHighlight(savedRange, editor, color);
+      } else if (format === "remove-highlight") {
+        nextRange = applyHighlight(savedRange, editor, null);
+      } else if (format === "link") {
+        const url = normalizeInlineLink(value ?? "");
+        if (!url) return;
+        document.execCommand("createLink", false, url);
+        nextRange =
+          window.getSelection()?.rangeCount === 1
+            ? (window.getSelection()?.getRangeAt(0).cloneRange() ?? savedRange)
+            : savedRange;
+      } else if (format === "clear") {
+        document.execCommand("removeFormat");
+        document.execCommand("unlink");
+        nextRange =
+          window.getSelection()?.rangeCount === 1
+            ? (window.getSelection()?.getRangeAt(0).cloneRange() ?? savedRange)
+            : savedRange;
+        for (const selector of ["mark", "code"]) {
+          const customFormat: HTMLElement | null = nextRange
+            ? closestInlineElement(nextRange, editor, selector)
+            : null;
+          if (customFormat) {
+            nextRange = unwrapInlineElement(customFormat) ?? nextRange;
+          }
+        }
+      }
+
+      const markdown = serializeInlineContent(editor);
+      editor.dataset.inlineMarkdown = markdown;
+      updateBlock(current.blockId, { text: markdown });
+
+      if (nextRange) {
+        inlineRangeRef.current = nextRange.cloneRange();
+        const bounds = nextRange.getBoundingClientRect();
+        setInlineSelection((selectionState) =>
+          selectionState
+            ? {
+                ...selectionState,
+                rect: {
+                  bottom: bounds.bottom,
+                  left: bounds.left,
+                  top: bounds.top,
+                  width: bounds.width
+                }
+              }
+            : null
+        );
+      }
+    },
+    [inlineSelection, updateBlock]
+  );
+
   const insertAfter = useCallback((id: string, type: BlockType = "p") => {
     const nextBlock = emptyBlock(type);
     setBlocks((current) => {
@@ -388,7 +1095,7 @@ export function BlockEditor({
         ...current.slice(index + 1)
       ];
     });
-    setFocusId(nextBlock.id);
+    setFocusRequest({ id: nextBlock.id });
   }, []);
 
   const removeBlock = useCallback((id: string) => {
@@ -397,10 +1104,165 @@ export function BlockEditor({
       if (index < 0) return current;
       const next = [...current.slice(0, index), ...current.slice(index + 1)];
       if (!next.length) next.push(emptyBlock());
-      const target = next[Math.max(0, index - 1)];
-      if (target) setFocusId(target.id);
+      const target = isStructuralBlock(current[index])
+        ? (next[index] ?? next[index - 1])
+        : next[Math.max(0, index - 1)];
+      if (target) setFocusRequest({ id: target.id });
       return next;
     });
+  }, []);
+
+  const moveBlock = useCallback((id: string, targetIndex: number) => {
+    setBlocks((current) => moveBlockToIndex(current, id, targetIndex));
+    setFocusRequest({ id });
+  }, []);
+
+  const updateBlockDrag = useCallback((next: BlockDragState | null) => {
+    blockDragRef.current = next;
+    setBlockDrag(next);
+  }, []);
+
+  const beginBlockDrag = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>, block: Block) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      updateBlockDrag({
+        active: false,
+        blockId: block.id,
+        dropIndex: null,
+        label: getBlockLabel(block),
+        overTrash: false,
+        pointerId: event.pointerId,
+        preview: getBlockPreview(block),
+        startX: event.clientX,
+        startY: event.clientY,
+        x: event.clientX,
+        y: event.clientY
+      });
+    },
+    [updateBlockDrag]
+  );
+
+  useEffect(() => {
+    if (!blockDrag) return;
+
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "grabbing";
+    document.body.style.userSelect = "none";
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const current = blockDragRef.current;
+      if (!current || event.pointerId !== current.pointerId) return;
+
+      const distance = Math.hypot(
+        event.clientX - current.startX,
+        event.clientY - current.startY
+      );
+      const active = current.active || distance >= 6;
+      const trashBounds = trashZoneRef.current?.getBoundingClientRect();
+      const overTrash =
+        active &&
+        Boolean(
+          trashBounds &&
+          event.clientX >= trashBounds.left &&
+          event.clientX <= trashBounds.right &&
+          event.clientY >= trashBounds.top &&
+          event.clientY <= trashBounds.bottom
+        );
+      const editor = editorRef.current;
+      const editorBounds = editor?.getBoundingClientRect();
+      let dropIndex: number | null = null;
+
+      if (
+        active &&
+        !overTrash &&
+        editor &&
+        editorBounds &&
+        event.clientX >= editorBounds.left - 48 &&
+        event.clientX <= editorBounds.right + 48 &&
+        event.clientY >= editorBounds.top - 24 &&
+        event.clientY <= editorBounds.bottom + 24
+      ) {
+        const blockElements = Array.from(
+          editor.querySelectorAll<HTMLElement>(":scope > .editor-block")
+        );
+        const candidateIndex = blockElements.findIndex((element) => {
+          const bounds = element.getBoundingClientRect();
+          return event.clientY < bounds.top + bounds.height / 2;
+        });
+        const nextIndex =
+          candidateIndex < 0 ? blockElements.length : candidateIndex;
+        const sourceIndex = blockElements.findIndex(
+          (element) => element.dataset.editorBlockId === current.blockId
+        );
+        if (nextIndex !== sourceIndex && nextIndex !== sourceIndex + 1) {
+          dropIndex = nextIndex;
+        }
+      }
+
+      updateBlockDrag({
+        ...current,
+        active,
+        dropIndex,
+        overTrash,
+        x: event.clientX,
+        y: event.clientY
+      });
+    };
+
+    const finishDrag = (event: PointerEvent) => {
+      const current = blockDragRef.current;
+      if (!current || event.pointerId !== current.pointerId) return;
+      if (current.active && current.overTrash) {
+        removeBlock(current.blockId);
+      } else if (current.active && current.dropIndex !== null) {
+        moveBlock(current.blockId, current.dropIndex);
+      }
+      updateBlockDrag(null);
+    };
+
+    const cancelDrag = () => updateBlockDrag(null);
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", finishDrag);
+    window.addEventListener("pointercancel", cancelDrag);
+    window.addEventListener("blur", cancelDrag);
+    return () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", finishDrag);
+      window.removeEventListener("pointercancel", cancelDrag);
+      window.removeEventListener("blur", cancelDrag);
+    };
+  }, [blockDrag?.pointerId, moveBlock, removeBlock, updateBlockDrag]);
+
+  const removeEmptyBlock = useCallback((id: string) => {
+    const fallbackBlock = emptyBlock();
+    setBlocks((current) => {
+      const result = deleteEmptyBlock(current, id, fallbackBlock);
+      if (result.focusId) setFocusRequest({ id: result.focusId });
+      return result.blocks;
+    });
+  }, []);
+
+  const insertDivider = useCallback((id: string) => {
+    const trailingBlock = emptyBlock();
+    setBlocks((current) => replaceBlockWithDivider(current, id, trailingBlock));
+    setSlash(null);
+    setFocusRequest({ id: trailingBlock.id });
+  }, []);
+
+  const insertTable = useCallback((id: string) => {
+    const table = emptyBlock("table");
+    const leadingBlock = emptyBlock();
+    const trailingBlock = emptyBlock();
+    setBlocks((current) =>
+      replaceBlockWithTable(current, id, table, leadingBlock, trailingBlock)
+    );
+    setSlash(null);
+    setFocusRequest({ id });
   }, []);
 
   const changeType = useCallback((id: string, type: BlockType) => {
@@ -416,30 +1278,50 @@ export function BlockEditor({
   }, []);
 
   return (
-    <div className="relative">
+    <div className="relative" ref={editorRef}>
       {blocks.map((block, index) => (
-        <BlockView
-          autoFocus={focusId === block.id}
+        <BlockFrame
           block={block}
-          key={block.id}
-          onChangeType={(type) => changeType(block.id, type)}
-          onCloseSlash={() => setSlash(null)}
-          onFocusNext={() => {
-            const nextBlock = blocks[index + 1];
-            if (nextBlock) setFocusId(nextBlock.id);
-          }}
-          onFocusPrev={() => {
-            const previousBlock = blocks[index - 1];
-            if (previousBlock) setFocusId(previousBlock.id);
-          }}
-          onInsertAfter={(type) => insertAfter(block.id, type)}
-          onOpenSlash={(query, rect) =>
-            setSlash({ blockId: block.id, query, rect })
+          dropPosition={
+            blockDrag?.active && blockDrag.dropIndex === index
+              ? "before"
+              : blockDrag?.active &&
+                  blockDrag.dropIndex === blocks.length &&
+                  index === blocks.length - 1
+                ? "after"
+                : null
           }
-          onRemove={() => removeBlock(block.id)}
-          onUpdate={(patch) => updateBlock(block.id, patch)}
-          slashOpen={slash?.blockId === block.id}
-        />
+          dragging={Boolean(
+            blockDrag?.active && blockDrag.blockId === block.id
+          )}
+          key={block.id}
+          onDragStart={(event) => beginBlockDrag(event, block)}
+        >
+          <BlockView
+            block={block}
+            focusRequest={focusRequest?.id === block.id ? focusRequest : null}
+            onChangeType={(type) => changeType(block.id, type)}
+            onCloseSlash={() => setSlash(null)}
+            onFocusNext={() => {
+              const nextBlock = blocks[index + 1];
+              if (nextBlock) setFocusRequest({ id: nextBlock.id });
+            }}
+            onFocusPrev={() => {
+              const previousBlock = blocks[index - 1];
+              if (previousBlock) setFocusRequest({ id: previousBlock.id });
+            }}
+            onInsertAfter={(type) => insertAfter(block.id, type)}
+            onInsertDivider={() => insertDivider(block.id)}
+            onInsertTable={() => insertTable(block.id)}
+            onOpenSlash={(query, rect) =>
+              setSlash({ blockId: block.id, query, rect })
+            }
+            onRemove={() => removeBlock(block.id)}
+            onRemoveEmpty={() => removeEmptyBlock(block.id)}
+            onUpdate={(patch) => updateBlock(block.id, patch)}
+            slashOpen={slash?.blockId === block.id}
+          />
+        </BlockFrame>
       ))}
 
       {typeof document !== "undefined"
@@ -451,17 +1333,45 @@ export function BlockEditor({
                   onClose={() => setSlash(null)}
                   onSelect={(option) => {
                     const type = option.key as BlockType;
-                    changeType(slash.blockId, type);
-                    setSlash(null);
                     if (type === "divider") {
-                      // A divider is not editable, so drop an empty paragraph
-                      // after it and focus there to keep writing.
-                      insertAfter(slash.blockId, "p");
+                      insertDivider(slash.blockId);
+                    } else if (type === "table") {
+                      insertTable(slash.blockId);
                     } else {
-                      setFocusId(slash.blockId);
+                      changeType(slash.blockId, type);
+                      setSlash(null);
+                      setFocusRequest({ id: slash.blockId });
                     }
                   }}
                   query={slash.query}
+                />
+              ) : null}
+            </AnimatePresence>,
+            document.body
+          )
+        : null}
+      {typeof document !== "undefined"
+        ? createPortal(
+            <AnimatePresence>
+              {blockDrag?.active ? (
+                <BlockDragOverlay
+                  drag={blockDrag}
+                  trashZoneRef={trashZoneRef}
+                />
+              ) : null}
+            </AnimatePresence>,
+            document.body
+          )
+        : null}
+      {typeof document !== "undefined"
+        ? createPortal(
+            <AnimatePresence>
+              {inlineSelection ? (
+                <InlineFormattingToolbar
+                  activeFormats={inlineSelection.formats}
+                  anchor={inlineSelection.rect}
+                  onFormat={applyInlineFormat}
+                  toolbarRef={inlineToolbarRef}
                 />
               ) : null}
             </AnimatePresence>,
@@ -472,24 +1382,303 @@ export function BlockEditor({
   );
 }
 
-function BlockView({
-  autoFocus,
+interface BlockDragState {
+  active: boolean;
+  blockId: string;
+  dropIndex: number | null;
+  label: string;
+  overTrash: boolean;
+  pointerId: number;
+  preview: string;
+  startX: number;
+  startY: number;
+  x: number;
+  y: number;
+}
+
+function getBlockLabel(block: Block): string {
+  const labels: Record<BlockType, string> = {
+    bullet: "Lista",
+    code: "Código",
+    divider: "Divisor",
+    h1: "Encabezado 1",
+    h2: "Encabezado 2",
+    h3: "Encabezado 3",
+    p: "Texto",
+    quote: "Cita",
+    table: "Tabla",
+    todo: "Tarea"
+  };
+  return labels[block.type];
+}
+
+function getBlockPreview(block: Block): string {
+  if (block.type === "divider") return "Línea divisoria";
+  if (block.type === "table") {
+    const rows = block.rows?.length ?? TABLE_MIN_ROWS;
+    const columns = block.rows?.[0]?.length ?? TABLE_MIN_COLUMNS;
+    return `${rows} × ${columns}`;
+  }
+  return block.text.trim().slice(0, 64) || "Bloque vacío";
+}
+
+function BlockFrame({
   block,
+  children,
+  dropPosition,
+  dragging,
+  onDragStart
+}: {
+  block: Block;
+  children: ReactNode;
+  dropPosition: "after" | "before" | null;
+  dragging: boolean;
+  onDragStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+}) {
+  const isEmptyParagraph = block.type === "p" && !block.text.trim();
+  const isHeading =
+    block.type === "h1" || block.type === "h2" || block.type === "h3";
+
+  return (
+    <div
+      className={`editor-block group/block ${
+        dragging ? "is-dragging" : ""
+      } ${dropPosition ? `is-drop-${dropPosition}` : ""} ${
+        isEmptyParagraph ? "is-empty-paragraph" : ""
+      } ${isHeading ? "is-heading" : ""}`}
+      data-editor-block-id={block.id}
+    >
+      <button
+        aria-label={`Arrastrar bloque: ${getBlockLabel(block)}`}
+        className="editor-block__handle"
+        onPointerDown={onDragStart}
+        type="button"
+      >
+        <GripVertical aria-hidden="true" size={15} />
+      </button>
+      {children}
+    </div>
+  );
+}
+
+function BlockDragOverlay({
+  drag,
+  trashZoneRef
+}: {
+  drag: BlockDragState;
+  trashZoneRef: { current: HTMLDivElement | null };
+}) {
+  return (
+    <>
+      <motion.div
+        animate={{ opacity: 1, scale: 1 }}
+        className="block-drag-ghost"
+        initial={{ opacity: 0, scale: 0.96 }}
+        style={{ left: drag.x + 16, top: drag.y + 16 }}
+      >
+        <GripVertical aria-hidden="true" size={15} />
+        <span>
+          <strong>{drag.label}</strong>
+          <small>{drag.preview}</small>
+        </span>
+      </motion.div>
+      <motion.div
+        animate={{ opacity: 1, y: 0 }}
+        className={`block-trash-zone ${drag.overTrash ? "is-over" : ""}`}
+        initial={{ opacity: 0, y: 16 }}
+        ref={trashZoneRef}
+      >
+        <Trash2 aria-hidden="true" size={18} />
+        <span>
+          {drag.overTrash
+            ? "Suelta para eliminar"
+            : "Arrastra aquí para eliminar"}
+        </span>
+      </motion.div>
+    </>
+  );
+}
+
+function InlineFormattingToolbar({
+  activeFormats,
+  anchor,
+  onFormat,
+  toolbarRef
+}: {
+  activeFormats: InlineFormat[];
+  anchor: { bottom: number; left: number; top: number; width: number };
+  onFormat: (
+    format: InlineFormat | "clear" | "highlight" | "remove-highlight",
+    value?: string
+  ) => void;
+  toolbarRef: { current: HTMLDivElement | null };
+}) {
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkValue, setLinkValue] = useState("https://");
+  const placeBelow = anchor.top < 96;
+  const center = anchor.left + anchor.width / 2;
+  const left = clamp(center, 178, window.innerWidth - 178);
+
+  const submitLink = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const url = normalizeInlineLink(linkValue);
+    if (!url) return;
+    onFormat("link", url);
+    setLinkOpen(false);
+  };
+
+  const formatButtons: Array<{
+    format: InlineFormat | "clear";
+    icon: ReactNode;
+    label: string;
+  }> = [
+    { format: "bold", icon: <Bold size={17} />, label: "Negrita" },
+    { format: "italic", icon: <Italic size={17} />, label: "Cursiva" },
+    { format: "underline", icon: <Underline size={17} />, label: "Subrayado" },
+    {
+      format: "strike",
+      icon: <Strikethrough size={17} />,
+      label: "Tachado"
+    },
+    { format: "code", icon: <CodeXml size={17} />, label: "Código en línea" },
+    {
+      format: "clear",
+      icon: <RemoveFormatting size={17} />,
+      label: "Quitar formato"
+    }
+  ];
+
+  return (
+    <motion.div
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      className={`inline-format-toolbar ${placeBelow ? "is-below" : ""}`}
+      initial={{ opacity: 0, scale: 0.97, y: placeBelow ? -4 : 4 }}
+      onMouseDown={(event) => {
+        if (!(event.target instanceof HTMLInputElement)) {
+          event.preventDefault();
+        }
+      }}
+      ref={toolbarRef}
+      style={{
+        left,
+        top: placeBelow ? anchor.bottom + 10 : anchor.top - 10
+      }}
+      transition={{ duration: 0.14 }}
+    >
+      <div className="inline-format-toolbar__actions">
+        {formatButtons.slice(0, 4).map((button) => (
+          <button
+            aria-label={button.label}
+            aria-pressed={
+              button.format !== "clear" && activeFormats.includes(button.format)
+            }
+            className="inline-format-toolbar__button"
+            key={button.format}
+            onClick={() => onFormat(button.format)}
+            title={button.label}
+            type="button"
+          >
+            {button.icon}
+          </button>
+        ))}
+        <button
+          aria-label="Enlace"
+          aria-pressed={activeFormats.includes("link")}
+          className="inline-format-toolbar__button"
+          onClick={() => setLinkOpen((current) => !current)}
+          title="Enlace"
+          type="button"
+        >
+          <Link2 size={17} />
+        </button>
+        {formatButtons.slice(4).map((button) => (
+          <button
+            aria-label={button.label}
+            aria-pressed={
+              button.format !== "clear" && activeFormats.includes(button.format)
+            }
+            className="inline-format-toolbar__button"
+            key={button.format}
+            onClick={() => onFormat(button.format)}
+            title={button.label}
+            type="button"
+          >
+            {button.icon}
+          </button>
+        ))}
+      </div>
+
+      <div className="inline-format-toolbar__highlights">
+        <span title="Marcatexto">
+          <Highlighter aria-hidden="true" size={15} />
+        </span>
+        {INLINE_HIGHLIGHT_COLORS.map((color) => (
+          <button
+            aria-label={`Marcatexto ${color}`}
+            className="inline-format-toolbar__swatch"
+            data-highlight={color}
+            key={color}
+            onClick={() => onFormat("highlight", color)}
+            type="button"
+          />
+        ))}
+        <button
+          aria-label="Quitar marcatexto"
+          className="inline-format-toolbar__swatch is-clear"
+          onClick={() => onFormat("remove-highlight")}
+          title="Quitar marcatexto"
+          type="button"
+        />
+      </div>
+
+      <AnimatePresence initial={false}>
+        {linkOpen ? (
+          <motion.form
+            animate={{ height: "auto", opacity: 1 }}
+            className="inline-format-toolbar__link"
+            exit={{ height: 0, opacity: 0 }}
+            initial={{ height: 0, opacity: 0 }}
+            onSubmit={submitLink}
+          >
+            <input
+              aria-label="Dirección del enlace"
+              autoFocus
+              onChange={(event) => setLinkValue(event.target.value)}
+              placeholder="https://..."
+              value={linkValue}
+            />
+            <button type="submit">Aplicar</button>
+          </motion.form>
+        ) : null}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+function BlockView({
+  block,
+  focusRequest,
   onChangeType,
   onCloseSlash,
   onFocusNext,
   onFocusPrev,
   onInsertAfter,
+  onInsertDivider,
+  onInsertTable,
   onOpenSlash,
   onRemove,
+  onRemoveEmpty,
   onUpdate,
   slashOpen
 }: {
   block: Block;
-  autoFocus: boolean;
+  focusRequest: { id: string } | null;
   onUpdate: (patch: Partial<Block>) => void;
   onInsertAfter: (type?: BlockType) => void;
+  onInsertDivider: () => void;
+  onInsertTable: () => void;
   onRemove: () => void;
+  onRemoveEmpty: () => void;
   onChangeType: (type: BlockType) => void;
   onFocusPrev: () => void;
   onFocusNext: () => void;
@@ -505,43 +1694,65 @@ function BlockView({
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element) return;
-    if (element.textContent !== block.text) {
-      element.textContent = block.text;
+    if (element.dataset.inlineMarkdown !== block.text) {
+      element.innerHTML = renderInlineMarkdown(block.text);
+      element.dataset.inlineMarkdown = block.text;
     }
   }, [block.text]);
 
   useEffect(() => {
-    if (autoFocus && ref.current) {
+    if (focusRequest && ref.current) {
       ref.current.focus();
       placeCaretAtEnd(ref.current);
     }
-  }, [autoFocus]);
+  }, [focusRequest]);
 
   if (block.type === "divider") {
     return (
-      <motion.div
-        animate={{ opacity: 1, y: 0 }}
-        className="group relative my-5"
-        initial={{ opacity: 0, y: 4 }}
-        transition={{ duration: 0.2 }}
-      >
-        <div className="h-px bg-[color:var(--line-strong)]" />
-      </motion.div>
+      <DividerBlock
+        focusRequest={focusRequest}
+        onFocusNext={onFocusNext}
+        onFocusPrev={onFocusPrev}
+        onRemove={onRemove}
+      />
     );
   }
 
   if (block.type === "table") {
-    return <TableBlock block={block} onUpdate={onUpdate} />;
+    return (
+      <TableBlock
+        block={block}
+        focusRequest={focusRequest}
+        onFocusNext={onFocusNext}
+        onFocusPrev={onFocusPrev}
+        onUpdate={onUpdate}
+      />
+    );
+  }
+
+  if (block.type === "code") {
+    return (
+      <CodeBlock
+        block={block}
+        focusRequest={focusRequest}
+        onChangeType={onChangeType}
+        onFocusNext={onFocusNext}
+        onFocusPrev={onFocusPrev}
+        onUpdate={onUpdate}
+      />
+    );
   }
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     const element = ref.current;
     if (!element) return;
     const text = element.textContent ?? "";
+    const markdown = serializeInlineContent(element);
 
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      onUpdate({ text });
+      element.dataset.inlineMarkdown = markdown;
+      onUpdate({ text: markdown });
 
       if (
         (block.type === "h1" ||
@@ -571,7 +1782,7 @@ function BlockView({
       if (block.type !== "p") {
         onChangeType("p");
       } else {
-        onRemove();
+        onRemoveEmpty();
       }
       return;
     }
@@ -598,7 +1809,9 @@ function BlockView({
     const element = ref.current;
     if (!element) return;
     const text = element.textContent ?? "";
-    onUpdate({ text });
+    const markdown = serializeInlineContent(element);
+    element.dataset.inlineMarkdown = markdown;
+    onUpdate({ text: markdown });
 
     if (block.type === "p") {
       const match = text.match(
@@ -629,12 +1842,13 @@ function BlockView({
             if (nextType === "todo") {
               onUpdate({ checked: checked ?? false, text: "", type: nextType });
             } else {
-              onUpdate({ text: "", type: nextType });
-            }
-            if (nextType === "divider") {
-              // The divider block is not editable; add an empty paragraph after
-              // it and focus it so writing can continue below the line.
-              onInsertAfter("p");
+              if (nextType === "divider") {
+                onInsertDivider();
+              } else if (nextType === "table") {
+                onInsertTable();
+              } else {
+                onUpdate({ text: "", type: nextType });
+              }
             }
           });
           return;
@@ -671,16 +1885,18 @@ function BlockView({
                   ? "Tarea"
                   : "Código";
 
+  // Block typography (size, weight, leading, spacing, color) is owned by CSS in
+  // `.note-editor-content [data-block-type=…]` — the single source of truth.
+  // These classes carry only structural rhythm that CSS does not provide.
   const textClasses: Record<BlockType, string> = {
-    p: "text-[15.5px] leading-[1.72] text-[color:var(--ink)] py-1",
-    h1: "font-display text-[32px] leading-[1.1] font-semibold tracking-[-0.02em] mt-6 mb-1",
-    h2: "font-display text-[23px] leading-[1.15] font-semibold tracking-[-0.02em] mt-5 mb-1",
-    h3: "font-display text-[18px] leading-[1.2] font-semibold tracking-[-0.015em] mt-4 mb-1",
-    quote:
-      "font-display italic text-[17px] leading-[1.55] text-[color:var(--muted)] border-l-2 border-[color:var(--ink)] pl-4 my-2",
-    bullet: "text-[15.5px] leading-[1.72]",
-    todo: "text-[15.5px] leading-[1.6]",
-    code: "font-mono text-[13.5px] leading-[1.55] rounded-lg bg-[color:var(--accent-soft)] border border-[color:var(--line)] px-3 py-2 my-2",
+    p: "py-1",
+    h1: "font-display",
+    h2: "font-display",
+    h3: "font-display",
+    quote: "",
+    bullet: "",
+    todo: "",
+    code: "font-mono",
     divider: "",
     table: ""
   };
@@ -689,9 +1905,16 @@ function BlockView({
     <div
       className={`outline-none whitespace-pre-wrap break-words ${textClasses[block.type]}`}
       contentEditable
+      data-inline-editor-id={block.id}
       data-block-type={block.type}
       data-placeholder={placeholder}
-      onBlur={() => onUpdate({ text: ref.current?.textContent ?? "" })}
+      onBlur={() => {
+        const element = ref.current;
+        if (!element) return;
+        const markdown = serializeInlineContent(element);
+        element.dataset.inlineMarkdown = markdown;
+        onUpdate({ text: markdown });
+      }}
       onInput={handleInput}
       onKeyDown={handleKeyDown}
       ref={ref}
@@ -769,11 +1992,218 @@ function BlockView({
   );
 }
 
-function TableBlock({
+function CodeBlock({
   block,
+  focusRequest,
+  onChangeType,
+  onFocusNext,
+  onFocusPrev,
   onUpdate
 }: {
   block: Block;
+  focusRequest: { id: string } | null;
+  onChangeType: (type: BlockType) => void;
+  onFocusNext: () => void;
+  onFocusPrev: () => void;
+  onUpdate: (patch: Partial<Block>) => void;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const highlightRef = useRef<HTMLPreElement | null>(null);
+  const highlighted = useMemo(
+    () => highlightCode(block.text, block.language),
+    [block.language, block.text]
+  );
+
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.max(112, textarea.scrollHeight)}px`;
+  }, [block.text]);
+
+  useEffect(() => {
+    if (!focusRequest || !textareaRef.current) return;
+    textareaRef.current.focus();
+    textareaRef.current.setSelectionRange(block.text.length, block.text.length);
+  }, [block.text.length, focusRequest]);
+
+  const selectedLanguage = normalizeCodeLanguage(block.language ?? "") ?? "";
+  const detectedLabel =
+    CODE_LANGUAGE_OPTIONS.find(
+      (option) => option.value === highlighted.language
+    )?.label ??
+    highlighted.language ??
+    "Texto";
+
+  return (
+    <motion.div
+      animate={{ opacity: 1, y: 0 }}
+      className="code-editor group/code my-4 overflow-hidden rounded-xl"
+      initial={{ opacity: 0, y: 4 }}
+      transition={{ duration: 0.2 }}
+    >
+      <div className="code-editor__header">
+        <div className="code-editor__lights" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+        <span className="code-editor__title">Código</span>
+        <label className="code-editor__language">
+          <span className="sr-only">Lenguaje</span>
+          <select
+            aria-label="Lenguaje del código"
+            onChange={(event) =>
+              onUpdate({
+                language: event.target.value || undefined
+              })
+            }
+            value={selectedLanguage}
+          >
+            {CODE_LANGUAGE_OPTIONS.map((option) => (
+              <option key={option.value || "auto"} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          {selectedLanguage ? null : (
+            <span className="code-editor__detected">{detectedLabel}</span>
+          )}
+        </label>
+      </div>
+      <div className="code-editor__body">
+        <pre
+          aria-hidden="true"
+          className="code-editor__highlight"
+          dangerouslySetInnerHTML={{
+            __html: highlighted.html || " "
+          }}
+          ref={highlightRef}
+        />
+        <textarea
+          aria-label="Código"
+          autoCapitalize="off"
+          autoComplete="off"
+          autoCorrect="off"
+          className="code-editor__input"
+          onChange={(event) => onUpdate({ text: event.target.value })}
+          onKeyDown={(event) => {
+            const textarea = event.currentTarget;
+            if (event.key === "Tab") {
+              event.preventDefault();
+              const start = textarea.selectionStart;
+              const end = textarea.selectionEnd;
+              const nextText = `${block.text.slice(0, start)}  ${block.text.slice(end)}`;
+              onUpdate({ text: nextText });
+              requestAnimationFrame(() => {
+                textarea.setSelectionRange(start + 2, start + 2);
+              });
+            } else if (
+              event.key === "Backspace" &&
+              block.text === "" &&
+              !event.shiftKey
+            ) {
+              event.preventDefault();
+              onChangeType("p");
+            } else if (
+              event.key === "ArrowUp" &&
+              textarea.selectionStart === 0 &&
+              textarea.selectionEnd === 0
+            ) {
+              event.preventDefault();
+              onFocusPrev();
+            } else if (
+              event.key === "ArrowDown" &&
+              textarea.selectionStart === block.text.length &&
+              textarea.selectionEnd === block.text.length
+            ) {
+              event.preventDefault();
+              onFocusNext();
+            } else if (
+              event.key === "Enter" &&
+              (event.metaKey || event.ctrlKey)
+            ) {
+              event.preventDefault();
+              onFocusNext();
+            }
+          }}
+          onScroll={(event) => {
+            const highlight = highlightRef.current;
+            if (!highlight) return;
+            highlight.scrollTop = event.currentTarget.scrollTop;
+            highlight.scrollLeft = event.currentTarget.scrollLeft;
+          }}
+          placeholder="Escribe o pega código…"
+          ref={textareaRef}
+          spellCheck={false}
+          value={block.text}
+        />
+      </div>
+    </motion.div>
+  );
+}
+
+function DividerBlock({
+  focusRequest,
+  onFocusNext,
+  onFocusPrev,
+  onRemove
+}: {
+  focusRequest: { id: string } | null;
+  onFocusNext: () => void;
+  onFocusPrev: () => void;
+  onRemove: () => void;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (focusRequest) ref.current?.focus();
+  }, [focusRequest]);
+
+  return (
+    <motion.div
+      animate={{ opacity: 1, y: 0 }}
+      aria-label="Divisor"
+      className="group relative my-3 cursor-default rounded-sm py-2 outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)]"
+      data-block-type="divider"
+      initial={{ opacity: 0, y: 4 }}
+      onKeyDown={(event) => {
+        if (event.key === "Backspace" || event.key === "Delete") {
+          event.preventDefault();
+          onRemove();
+        } else if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+          event.preventDefault();
+          onFocusPrev();
+        } else if (
+          event.key === "ArrowDown" ||
+          event.key === "ArrowRight" ||
+          event.key === "Enter"
+        ) {
+          event.preventDefault();
+          onFocusNext();
+        }
+      }}
+      ref={ref}
+      role="separator"
+      tabIndex={0}
+      transition={{ duration: 0.2 }}
+    >
+      <div className="h-px bg-[color:var(--line-strong)] transition-colors group-focus:bg-[color:var(--accent)]" />
+    </motion.div>
+  );
+}
+
+function TableBlock({
+  block,
+  focusRequest,
+  onFocusNext,
+  onFocusPrev,
+  onUpdate
+}: {
+  block: Block;
+  focusRequest: { id: string } | null;
+  onFocusNext: () => void;
+  onFocusPrev: () => void;
   onUpdate: (patch: Partial<Block>) => void;
 }) {
   const rows = block.rows ?? [
@@ -781,6 +2211,15 @@ function TableBlock({
     ["", ""]
   ];
   const columns = rows[0]?.length ?? 2;
+  const resizeRef = useRef<{
+    pointerId: number;
+    startColumns: number;
+    startRows: number;
+    startX: number;
+    startY: number;
+    sourceRows: string[][];
+  } | null>(null);
+  const [resizing, setResizing] = useState(false);
 
   const setCell = (rowIndex: number, columnIndex: number, text: string) => {
     onUpdate({
@@ -794,50 +2233,114 @@ function TableBlock({
     });
   };
 
+  useEffect(() => {
+    if (!resizing) return;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const resize = resizeRef.current;
+      if (!resize || resize.pointerId !== event.pointerId) return;
+      const size = resolveTableDragSize({
+        deltaX: event.clientX - resize.startX,
+        deltaY: event.clientY - resize.startY,
+        startColumns: resize.startColumns,
+        startRows: resize.startRows
+      });
+      onUpdate({
+        rows: resizeTableGrid(resize.sourceRows, size.rows, size.columns)
+      });
+    };
+
+    const finishResize = (event: PointerEvent) => {
+      if (resizeRef.current?.pointerId !== event.pointerId) return;
+      resizeRef.current = null;
+      setResizing(false);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", finishResize);
+    window.addEventListener("pointercancel", finishResize);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", finishResize);
+      window.removeEventListener("pointercancel", finishResize);
+    };
+  }, [onUpdate, resizing]);
+
   return (
     <motion.div
       animate={{ opacity: 1, y: 0 }}
-      className="group/table my-4"
+      className={`table-block group/table my-4 ${resizing ? "is-resizing" : ""}`}
       initial={{ opacity: 0, y: 4 }}
     >
-      <div className="inline-block overflow-hidden rounded-[var(--radius-lg)] border border-[color:var(--line)] bg-[color:var(--bg-paper)]/70">
-        <table className="border-collapse">
-          <tbody>
-            {rows.map((row, rowIndex) => (
-              <tr key={rowIndex}>
-                {row.map((cell, columnIndex) => (
-                  <td
-                    className={`border-r border-b border-[color:var(--line)] last:border-r-0 ${
-                      rowIndex === rows.length - 1 ? "border-b-0" : ""
-                    } ${rowIndex === 0 ? "bg-[color:var(--accent-soft)]" : ""}`}
-                    key={columnIndex}
-                  >
-                    <TableCell
-                      isHeader={rowIndex === 0}
-                      onCommit={(text) => setCell(rowIndex, columnIndex, text)}
-                      value={cell}
-                    />
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="mt-2 flex gap-2 opacity-0 transition group-hover/table:opacity-100">
+      <div className="table-block__surface">
+        <div className="table-block__viewport">
+          <table className="border-collapse">
+            <tbody>
+              {rows.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {row.map((cell, columnIndex) => (
+                    <td
+                      className={`border-r border-b border-[color:var(--line)] last:border-r-0 ${
+                        rowIndex === rows.length - 1 ? "border-b-0" : ""
+                      } ${rowIndex === 0 ? "bg-[color:var(--accent-soft)]" : ""}`}
+                      key={columnIndex}
+                    >
+                      <TableCell
+                        autoFocus={
+                          Boolean(focusRequest) &&
+                          rowIndex === 0 &&
+                          columnIndex === 0
+                        }
+                        isHeader={rowIndex === 0}
+                        onExitAfter={
+                          rowIndex === rows.length - 1 &&
+                          columnIndex === row.length - 1
+                            ? onFocusNext
+                            : undefined
+                        }
+                        onExitBefore={
+                          rowIndex === 0 && columnIndex === 0
+                            ? onFocusPrev
+                            : undefined
+                        }
+                        onCommit={(text) =>
+                          setCell(rowIndex, columnIndex, text)
+                        }
+                        value={cell}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <span className="table-block__size" aria-live="polite">
+          {rows.length} × {columns}
+        </span>
         <button
-          className="font-mono text-[11px] uppercase tracking-wider text-[color:var(--faint)] hover:text-[color:var(--ink)]"
-          onClick={() => onUpdate({ rows: [...rows, Array(columns).fill("")] })}
+          aria-label="Redimensionar tabla"
+          className="table-block__resize-handle"
+          onPointerDown={(event) => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            event.stopPropagation();
+            resizeRef.current = {
+              pointerId: event.pointerId,
+              sourceRows: rows.map((row) => [...row]),
+              startColumns: columns,
+              startRows: rows.length,
+              startX: event.clientX,
+              startY: event.clientY
+            };
+            setResizing(true);
+          }}
+          title="Arrastra para añadir o quitar filas y columnas"
           type="button"
         >
-          + fila
-        </button>
-        <button
-          className="font-mono text-[11px] uppercase tracking-wider text-[color:var(--faint)] hover:text-[color:var(--ink)]"
-          onClick={() => onUpdate({ rows: rows.map((row) => [...row, ""]) })}
-          type="button"
-        >
-          + columna
+          <span />
+          <span />
+          <span />
         </button>
       </div>
     </motion.div>
@@ -845,12 +2348,18 @@ function TableBlock({
 }
 
 function TableCell({
+  autoFocus,
   isHeader,
   onCommit,
+  onExitAfter,
+  onExitBefore,
   value
 }: {
+  autoFocus: boolean;
   isHeader: boolean;
   onCommit: (text: string) => void;
+  onExitAfter?: (() => void) | undefined;
+  onExitBefore?: (() => void) | undefined;
   value: string;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -865,6 +2374,13 @@ function TableCell({
     }
   }, [value]);
 
+  useEffect(() => {
+    if (autoFocus && ref.current) {
+      ref.current.focus();
+      placeCaretAtEnd(ref.current);
+    }
+  }, [autoFocus]);
+
   return (
     <div
       className={`min-w-[110px] px-3 py-1.5 text-[14px] outline-none ${
@@ -873,6 +2389,21 @@ function TableCell({
       contentEditable
       onBlur={(event) => onCommit(event.currentTarget.textContent ?? "")}
       onInput={(event) => onCommit(event.currentTarget.textContent ?? "")}
+      onKeyDown={(event) => {
+        const element = ref.current;
+        if (!element) return;
+        if (event.key === "ArrowUp" && onExitBefore && caretAtStart(element)) {
+          event.preventDefault();
+          onExitBefore();
+        } else if (
+          event.key === "ArrowDown" &&
+          onExitAfter &&
+          caretAtEnd(element)
+        ) {
+          event.preventDefault();
+          onExitAfter();
+        }
+      }}
       ref={ref}
       suppressContentEditableWarning
     />
@@ -978,7 +2509,7 @@ function SlashMenu({
   return (
     <motion.div
       animate={{ opacity: 1, scale: 1, y: 0 }}
-      className="glass-strong w-[260px] rounded-[var(--radius-lg)] p-1.5"
+      className="glass-strong w-[218px] rounded-[var(--radius-lg)] p-1.5"
       exit={{ opacity: 0, scale: 0.98, y: -4 }}
       initial={{ opacity: 0, scale: 0.98, y: -4 }}
       ref={menuRef}
@@ -992,32 +2523,31 @@ function SlashMenu({
       }}
       transition={{ duration: 0.15 }}
     >
-      <div className="px-2.5 pt-1 pb-1.5 font-mono text-[9.5px] uppercase tracking-[0.18em] text-[color:var(--faint)]">
-        Bloques · /{query}
+      <div className="px-2.5 pt-1 pb-1.5 text-[9.5px] font-semibold uppercase tracking-[0.18em] text-[color:var(--faint)]">
+        Bloques
       </div>
       <div className="flex flex-col">
         {filtered.map((option, index) => (
           <button
-            className={`flex items-center gap-3 rounded-lg px-2 py-1.5 text-left transition ${
+            className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition ${
               index === activeIndex
                 ? "bg-[color:var(--accent-soft)]"
                 : "hover:bg-[color:var(--accent-soft)]"
             }`}
             key={option.key}
-            onClick={() => onSelect(option)}
+            onMouseDown={(event) => {
+              event.preventDefault();
+              onSelect(option);
+            }}
             onMouseEnter={() => setActiveIndex(index)}
+            title={option.hint}
             type="button"
           >
             <span className="grid h-7 w-7 place-items-center rounded-md border border-[color:var(--line)] bg-[color:var(--bg-paper)] text-[color:var(--ink)]">
               {option.icon}
             </span>
-            <span className="flex min-w-0 flex-col">
-              <span className="text-[13px] font-medium text-[color:var(--ink)]">
-                {option.label}
-              </span>
-              <span className="truncate font-mono text-[11px] text-[color:var(--faint)]">
-                {option.hint}
-              </span>
+            <span className="min-w-0 truncate text-[13px] font-medium text-[color:var(--ink)]">
+              {option.label}
             </span>
           </button>
         ))}

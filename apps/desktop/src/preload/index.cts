@@ -546,6 +546,11 @@ contextBridge.exposeInMainWorld("gravity", {
       "custom-satellites:delete-instance",
       instanceId
     ) as Promise<void>,
+  deleteCustomSatelliteType: async (customTypeId: string) =>
+    ipcRenderer.invoke(
+      "custom-satellites:delete-type",
+      customTypeId
+    ) as Promise<CustomSatelliteState>,
   getAuthState: async () =>
     ipcRenderer.invoke("auth:get-state") as Promise<AuthStateRecord>,
   saveProviderApiKey: async (providerId: string, apiKey: string) =>

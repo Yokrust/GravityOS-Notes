@@ -558,6 +558,7 @@ interface StoreContextValue extends State {
   clearCustomSatelliteError: () => void;
   reopenCustomSatellite: (id: string) => Promise<void>;
   deleteCustomSatellite: (id: string) => Promise<void>;
+  deleteCustomSatelliteType: (id: string) => Promise<void>;
   closeSatellite: (id: string) => void;
   moveSatellite: (id: string, x: number, y: number) => void;
   resizeSatellite: (id: string, width: number, height: number) => void;
@@ -1037,6 +1038,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         await customSatelliteMutations.run(id, () =>
           window.gravity.deleteCustomSatelliteInstance(id)
         );
+      },
+      deleteCustomSatelliteType: async (id) => {
+        dispatch({ type: "clear-custom-satellite-error" });
+        try {
+          const nextState = await window.gravity.deleteCustomSatelliteType(id);
+          dispatch({ type: "hydrate-custom-satellites", state: nextState });
+        } catch (error: unknown) {
+          dispatch({
+            type: "set-custom-satellite-error",
+            instanceId: null,
+            message: getErrorMessage(error)
+          });
+        }
       },
       closeSatellite: (id) => {
         const target = state.satellites.find(

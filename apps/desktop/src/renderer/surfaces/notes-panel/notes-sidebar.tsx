@@ -11,12 +11,115 @@ import {
   X
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent
+} from "react";
 
 import { SurfaceSwitcher } from "../../components/SurfaceSwitcher.js";
 import type { AppSurface } from "../../lib/app-surface.js";
 import { useStore } from "../../lib/store.js";
 import type { FileNode } from "../../lib/types.js";
+
+export function normalizeInlineNodeName(value: string): string | null {
+  const normalized = value.trim();
+  return normalized || null;
+}
+
+export function EditableNodeName({
+  name,
+  onEditingChange,
+  onRename
+}: {
+  name: string;
+  onEditingChange?: (editing: boolean) => void;
+  onRename: (name: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const cancelRef = useRef(false);
+
+  useEffect(() => {
+    if (!editing) setDraft(name);
+  }, [editing, name]);
+
+  useEffect(() => {
+    if (!editing || !inputRef.current) return;
+    inputRef.current.focus();
+    inputRef.current.select();
+  }, [editing]);
+
+  const setEditingState = (next: boolean) => {
+    setEditing(next);
+    onEditingChange?.(next);
+  };
+
+  const beginEditing = (event: ReactMouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    cancelRef.current = false;
+    setDraft(name);
+    setEditingState(true);
+  };
+
+  const cancelEditing = () => {
+    cancelRef.current = true;
+    setDraft(name);
+    setEditingState(false);
+  };
+
+  const commitEditing = () => {
+    if (cancelRef.current) {
+      cancelRef.current = false;
+      return;
+    }
+    const normalized = normalizeInlineNodeName(draft);
+    if (normalized && normalized !== name) onRename(normalized);
+    setDraft(normalized ?? name);
+    setEditingState(false);
+  };
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    event.stopPropagation();
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitEditing();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      cancelEditing();
+    }
+  };
+
+  if (!editing) {
+    return (
+      <span
+        className="note-tree-name"
+        onDoubleClick={beginEditing}
+        title="Doble clic para cambiar el nombre"
+      >
+        {name}
+      </span>
+    );
+  }
+
+  return (
+    <input
+      aria-label={`Cambiar nombre de ${name}`}
+      className="note-tree-name-input"
+      onBlur={commitEditing}
+      onChange={(event) => setDraft(event.target.value)}
+      onClick={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => event.stopPropagation()}
+      onKeyDown={handleKeyDown}
+      ref={inputRef}
+      value={draft}
+    />
+  );
+}
 
 function NodeItem({ depth, node }: { node: FileNode; depth: number }) {
   const {
@@ -25,20 +128,24 @@ function NodeItem({ depth, node }: { node: FileNode; depth: number }) {
     addNote,
     deleteNode,
     expandedFolders,
+    renameNode,
     selectNote,
     sidebarOpen,
     toggleFolder,
     toggleSidebar
   } = useStore();
   const [hover, setHover] = useState(false);
+  const [renaming, setRenaming] = useState(false);
 
   if (node.type === "folder") {
     const isOpen = expandedFolders[node.id];
     return (
       <div>
         <div
-          className="note-tree-folder"
-          onClick={() => toggleFolder(node.id)}
+          className={`note-tree-folder ${renaming ? "is-renaming" : ""}`}
+          onClick={() => {
+            if (!renaming) toggleFolder(node.id);
+          }}
           onMouseEnter={() => setHover(true)}
           onMouseLeave={() => setHover(false)}
           style={{ paddingLeft: 12 + depth * 16 }}
@@ -55,10 +162,16 @@ function NodeItem({ depth, node }: { node: FileNode; depth: number }) {
           ) : (
             <Folder className="opacity-80" size={13} />
           )}
-          <span className="note-tree-name">{node.name}</span>
+          <EditableNodeName
+            name={node.name}
+            onEditingChange={setRenaming}
+            onRename={(name) => renameNode(node.id, name)}
+          />
           <span
             className={`note-tree-row-actions ${
-              hover ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+              hover && !renaming
+                ? "opacity-100"
+                : "opacity-0 group-hover:opacity-100"
             }`}
           >
             <button
@@ -124,8 +237,11 @@ function NodeItem({ depth, node }: { node: FileNode; depth: number }) {
   const isActive = node.id === activeNoteId;
   return (
     <motion.div
-      className={`note-tree-note ${isActive ? "is-active" : ""}`}
+      className={`note-tree-note ${isActive ? "is-active" : ""} ${
+        renaming ? "is-renaming" : ""
+      }`}
       onClick={() => {
+        if (renaming) return;
         selectNote(node.id);
         if (sidebarOpen && window.matchMedia("(max-width: 760px)").matches) {
           toggleSidebar();
@@ -136,8 +252,12 @@ function NodeItem({ depth, node }: { node: FileNode; depth: number }) {
       style={{ paddingLeft: 36 + depth * 16 }}
     >
       <FileText className={isActive ? "opacity-90" : "opacity-60"} size={12} />
-      <span className="note-tree-name">{node.name}</span>
-      {hover ? (
+      <EditableNodeName
+        name={node.name}
+        onEditingChange={setRenaming}
+        onRename={(name) => renameNode(node.id, name)}
+      />
+      {hover && !renaming ? (
         <button
           className="note-tree-icon-button"
           onClick={(event) => {

@@ -347,6 +347,29 @@ export class SqlitePersistenceAdapter implements PersistencePort {
     remove(instanceId);
   }
 
+  async deleteCustomSatelliteType(customTypeId: string): Promise<void> {
+    const remove = this.database.transaction((targetId: string) => {
+      this.database
+        .prepare(
+          `DELETE FROM custom_satellite_images
+           WHERE instance_id IN (
+             SELECT id FROM custom_satellite_instances
+             WHERE custom_type_id = ?
+           )`
+        )
+        .run(targetId);
+      this.database
+        .prepare(
+          "DELETE FROM custom_satellite_instances WHERE custom_type_id = ?"
+        )
+        .run(targetId);
+      this.database
+        .prepare("DELETE FROM custom_satellite_types WHERE id = ?")
+        .run(targetId);
+    });
+    remove(customTypeId);
+  }
+
   async getRun(runId: string): Promise<Run | null> {
     return this.readOne("runs", "id", runId, normalizeRun);
   }

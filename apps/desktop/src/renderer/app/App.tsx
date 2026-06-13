@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { FilePlus, FolderPlus, PanelLeft, Settings } from "lucide-react";
 
 import { AppearanceMenu } from "../components/AppearanceMenu.js";
+import { BrandLogo } from "../components/BrandLogo.js";
 import { SatelliteHubButton } from "../components/SatelliteHub.js";
 import { useAppearancePreferences } from "../composition/use-appearance-preferences.js";
 import type { AppSurface } from "../lib/app-surface.js";
@@ -71,7 +72,7 @@ function TopBar({
         >
           <PanelLeft size={16} strokeWidth={1.8} />
         </button>
-        <div className="brand-mark">G</div>
+        <BrandLogo className="brand-mark" />
         <span className="brand-name">Gravity</span>
         <span className="brand-rule" aria-hidden="true" />
         <span className="product-name">{surfaceName}</span>

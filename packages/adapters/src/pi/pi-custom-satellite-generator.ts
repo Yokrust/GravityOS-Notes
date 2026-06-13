@@ -59,7 +59,13 @@ const MODEL_PREFERENCES: ReadonlyArray<readonly [string, string]> = [
   ["openai", "gpt-5-mini"],
   ["anthropic", "claude-sonnet-4-6"],
   ["google", "gemini-2.5-flash"],
-  ["openai-codex", "gpt-5.1-codex-mini"]
+  ["openai-codex", "gpt-5.5"],
+  ["openai-codex", "gpt-5.4-mini"],
+  ["openai-codex", "gpt-5.4"],
+  ["openai-codex", "gpt-5.3-codex"],
+  ["openai-codex", "gpt-5.2-codex"],
+  ["openai-codex", "gpt-5.2"],
+  ["openai-codex", "gpt-5.1"]
 ];
 
 interface SatelliteModelRegistry {

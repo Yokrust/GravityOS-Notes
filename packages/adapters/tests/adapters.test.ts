@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { describe, expect, it } from "vitest";
+import { getModel } from "@mariozechner/pi-ai";
 
 import {
   createAgentActivityItem,
@@ -19,6 +20,7 @@ import {
   AuthStorage,
   NodeFilesystemAdapter,
   PiAuthAdapter,
+  selectSatelliteModel,
   PiRuntimeAdapter,
   SqlitePersistenceAdapter
 } from "../src/index.js";
@@ -276,13 +278,17 @@ describe("sqlite persistence adapter", () => {
         mimeType: "image/png"
       });
 
-      await adapter.deleteCustomSatelliteInstance(instance.id);
+      await adapter.deleteCustomSatelliteType(customType.id);
       await expect(
         adapter.loadCustomSatelliteImage("custom-satellite-image-2")
       ).resolves.toBeNull();
       await expect(
         adapter.loadCustomSatelliteImage("custom-satellite-image-3")
       ).resolves.toBeNull();
+      await expect(adapter.loadState()).resolves.toMatchObject({
+        customSatelliteTypes: [],
+        customSatelliteInstances: []
+      });
     } finally {
       adapter.close();
       await rm(rootPath, { force: true, recursive: true });
@@ -1516,5 +1522,25 @@ describe("pi auth adapter", () => {
     });
 
     expect(completedState.activeFlow).toBeNull();
+  });
+});
+
+describe("pi custom satellite generator", () => {
+  it("prefers a ChatGPT-compatible Codex model over the unsupported legacy mini model", () => {
+    const selected = selectSatelliteModel([
+      getModel("openai-codex", "gpt-5.1-codex-mini"),
+      getModel("openai-codex", "gpt-5.5")
+    ]);
+
+    expect(selected?.id).toBe("gpt-5.5");
+  });
+
+  it("does not explicitly prefer the unsupported legacy mini model", () => {
+    const selected = selectSatelliteModel([
+      getModel("openai-codex", "gpt-5.1-codex-mini"),
+      getModel("openai-codex", "gpt-5.1")
+    ]);
+
+    expect(selected?.id).toBe("gpt-5.1");
   });
 });

@@ -390,6 +390,10 @@ export function registerAppIpc(): void {
     "custom-satellites:delete-instance",
     async (_, instanceId: string) => customSatellites.deleteInstance(instanceId)
   );
+  ipcMain.handle(
+    "custom-satellites:delete-type",
+    async (_, customTypeId: string) => customSatellites.deleteType(customTypeId)
+  );
   ipcMain.handle("auth:get-state", async () =>
     serializeAuthState(await authService.hydrate())
   );

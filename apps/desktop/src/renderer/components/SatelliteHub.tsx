@@ -3,7 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
-import { Calendar, Plus, Sparkles, StickyNote, Timer, X } from "lucide-react";
+import {
+  Calendar,
+  Plus,
+  Sparkles,
+  StickyNote,
+  Timer,
+  Trash2,
+  X
+} from "lucide-react";
 import type { BuiltInSatelliteKind, SatelliteKind } from "@/lib/types";
 import { useStore } from "@/lib/store";
 import { canvasRef } from "@/lib/canvas-ref";
@@ -22,7 +30,6 @@ import { findClosedCustomSatelliteInstance } from "@/lib/custom-satellite-lifecy
 interface SatelliteMeta {
   kind: BuiltInSatelliteKind;
   title: string;
-  desc: string;
   icon: React.ReactNode;
   dotColor: string;
   accent: string;
@@ -32,7 +39,6 @@ const SATELLITES: SatelliteMeta[] = [
   {
     kind: "quick-note",
     title: "Quick Note",
-    desc: "Idea al vuelo",
     icon: <StickyNote size={15} />,
     dotColor: "#E7B94C",
     accent: "from-amber-200/70 to-amber-50/40"
@@ -40,7 +46,6 @@ const SATELLITES: SatelliteMeta[] = [
   {
     kind: "calendar",
     title: "Calendario",
-    desc: "Mes de un vistazo",
     icon: <Calendar size={15} />,
     dotColor: "#6DA3D8",
     accent: "from-sky-200/70 to-sky-50/40"
@@ -48,7 +53,6 @@ const SATELLITES: SatelliteMeta[] = [
   {
     kind: "pomodoro",
     title: "Pomodoro",
-    desc: "Foco en intervalos",
     icon: <Timer size={15} />,
     dotColor: "#D76B73",
     accent: "from-rose-200/70 to-rose-50/40"
@@ -77,6 +81,7 @@ export function SatelliteHubButton() {
     customSatelliteTypes,
     customSatelliteInstances,
     reopenCustomSatellite,
+    deleteCustomSatelliteType,
     pomodoroTimer,
     reminders,
     customSatelliteError,
@@ -294,17 +299,12 @@ export function SatelliteHubButton() {
                           }
                         />
                       </span>
-                      <span className="flex flex-col text-left leading-tight">
-                        <span className="font-display text-[14px] font-semibold">
-                          {s.title}
-                        </span>
-                        <span className="text-[11.5px] text-[color:var(--faint)] font-mono">
-                          {ghosted ? "ya abierto" : s.desc}
-                        </span>
+                      <span className="font-display flex-1 truncate text-left text-[14px] font-semibold">
+                        {s.title}
                       </span>
-                      {!ghosted ? (
-                        <span className="ml-auto text-[10.5px] text-[color:var(--faint)] font-mono opacity-0 group-hover:opacity-100 transition">
-                          drag →
+                      {ghosted ? (
+                        <span className="text-[11px] text-[color:var(--faint)]">
+                          Abierto
                         </span>
                       ) : null}
                     </motion.button>
@@ -312,22 +312,25 @@ export function SatelliteHubButton() {
                 })}
               </div>
               <div className="mt-1 border-t border-[color:var(--line)] pt-1">
-                <div className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.14em] text-[color:var(--faint)]">
-                  My Satellites
+                <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--faint)]">
+                  Mis satélites
                 </div>
                 {customSatelliteTypes.length === 0 ? (
                   <p className="px-3 pb-2 text-[11px] text-[color:var(--faint)]">
-                    Aún no has creado Satellites.
+                    Ninguno aún.
                   </p>
                 ) : (
                   customSatelliteTypes.map((customType, index) => {
                     const palette = CUSTOM_SATELLITE_COLORS[customType.color];
+                    const instanceCount = customSatelliteInstances.filter(
+                      (instance) => instance.customTypeId === customType.id
+                    ).length;
                     const closedInstance = findClosedCustomSatelliteInstance(
                       customSatelliteInstances,
                       customType.id
                     );
                     return (
-                      <motion.button
+                      <motion.div
                         key={customType.id}
                         initial={{ opacity: 0, x: 6 }}
                         animate={{ opacity: 1, x: 0 }}
@@ -337,48 +340,71 @@ export function SatelliteHubButton() {
                           ease: [0.22, 1, 0.36, 1]
                         }}
                         whileHover={{ x: 2 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={
-                          closedInstance
-                            ? () => {
-                                void reopenCustomSatellite(closedInstance.id);
-                              }
-                            : undefined
-                        }
-                        onPointerDown={
-                          closedInstance
-                            ? undefined
-                            : (e) => startCustomDrag(e, customType)
-                        }
-                        className={`group flex w-full touch-none select-none items-center gap-3 rounded-xl px-2.5 py-2 transition hover:bg-[color:var(--accent-soft)] ${
-                          closedInstance
-                            ? "cursor-pointer"
-                            : "cursor-grab active:cursor-grabbing"
-                        }`}
+                        className="group flex w-full items-center rounded-xl transition hover:bg-[color:var(--accent-soft)]"
                       >
-                        <span
-                          className="grid h-9 w-9 place-items-center rounded-xl border border-[color:var(--line)]"
-                          style={{
-                            background: palette.soft,
-                            color: palette.accent
-                          }}
+                        <button
+                          className={`flex min-w-0 flex-1 touch-none select-none items-center gap-3 px-2.5 py-2 ${
+                            closedInstance
+                              ? "cursor-pointer"
+                              : "cursor-grab active:cursor-grabbing"
+                          }`}
+                          onClick={
+                            closedInstance
+                              ? () => {
+                                  void reopenCustomSatellite(closedInstance.id);
+                                }
+                              : undefined
+                          }
+                          onPointerDown={
+                            closedInstance
+                              ? undefined
+                              : (event) => startCustomDrag(event, customType)
+                          }
+                          type="button"
                         >
-                          <CustomSatelliteIcon icon={customType.icon} />
-                        </span>
-                        <span className="flex min-w-0 flex-col text-left leading-tight">
-                          <span className="font-display truncate text-[14px] font-semibold">
-                            {customType.name}
+                          <span
+                            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-[color:var(--line)]"
+                            style={{
+                              background: palette.soft,
+                              color: palette.accent
+                            }}
+                          >
+                            <CustomSatelliteIcon icon={customType.icon} />
                           </span>
-                          <span className="text-[11.5px] text-[color:var(--faint)] font-mono">
-                            {closedInstance
-                              ? "cerrado · reabrir"
-                              : `${customType.properties.length} campos`}
+                          <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                            <span className="font-display truncate text-[14px] font-semibold">
+                              {customType.name}
+                            </span>
+                            {closedInstance ? (
+                              <span className="shrink-0 text-[11px] text-[color:var(--faint)]">
+                                Reabrir
+                              </span>
+                            ) : null}
                           </span>
-                        </span>
-                        <span className="ml-auto font-mono text-[10.5px] text-[color:var(--faint)] opacity-0 transition group-hover:opacity-100">
-                          {closedInstance ? "abrir →" : "drag →"}
-                        </span>
-                      </motion.button>
+                        </button>
+                        <button
+                          aria-label={`Eliminar ${customType.name}`}
+                          className="mr-1 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[color:var(--faint)] opacity-60 transition hover:bg-[color:var(--hover-1)] hover:text-[color:var(--danger)] group-hover:opacity-100"
+                          onClick={() => {
+                            const instanceSummary =
+                              instanceCount === 1
+                                ? "su instancia y todos sus datos"
+                                : `${instanceCount} instancias y todos sus datos`;
+                            if (
+                              window.confirm(
+                                `¿Eliminar permanentemente "${customType.name}", ${instanceSummary}?`
+                              )
+                            ) {
+                              void deleteCustomSatelliteType(customType.id);
+                            }
+                          }}
+                          onPointerDown={(event) => event.stopPropagation()}
+                          title="Eliminar Satellite inventado"
+                          type="button"
+                        >
+                          <Trash2 size={13} strokeWidth={1.7} />
+                        </button>
+                      </motion.div>
                     );
                   })
                 )}

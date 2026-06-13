@@ -135,6 +135,9 @@ interface Window {
     closeCustomSatelliteInstance(instanceId: string): Promise<void>;
     reopenCustomSatelliteInstance(instanceId: string): Promise<void>;
     deleteCustomSatelliteInstance(instanceId: string): Promise<void>;
+    deleteCustomSatelliteType(
+      customTypeId: string
+    ): Promise<CustomSatelliteStateRecord>;
   };
 }
 

@@ -232,6 +232,27 @@ function floatingGradient(
   return `linear-gradient(${rotation}deg, ${stops.join(", ")})`;
 }
 
+/**
+ * Lleva un color de ambiente a una banda de luminosidad donde su tono se
+ * percibe sobre la superficie activa. Un color casi negro en un esquema claro
+ * (o casi blanco en uno oscuro) se lava a gris plano al pintarse con poca
+ * opacidad — esto lo evita conservando tono y saturación, solo ajustando la
+ * luminosidad. Un gris puro se respeta (un velo gris es intencional).
+ */
+export function ensureVisibleTint([r, g, b]: Rgb, isDark: boolean): Rgb {
+  const [hueDeg, saturation, lightness] = rgbToHsl(r, g, b);
+  if (saturation === 0) return [r, g, b];
+  // Light schemes keep a light reading surface so secondary text (`--muted`,
+  // `--faint`) stays legible — the hue shows as a soft wash, not a dark muddy
+  // tint. Dark schemes keep a deeper glow.
+  const min = isDark ? 0.34 : 0.58;
+  const max = isDark ? 0.7 : 0.82;
+  const clampedL = Math.min(max, Math.max(min, lightness));
+  if (Math.abs(clampedL - lightness) < 0.001) return [r, g, b];
+  const hue = (((hueDeg / 360) % 1) + 1) % 1;
+  return hslToRgb(hue, saturation, clampedL);
+}
+
 /** Acerca el color a la superficie opuesta hasta lograr contraste legible. */
 export function ensureContrast(color: Rgb, isDark: boolean): Rgb {
   const surface = isDark ? DARK_SURFACE : LIGHT_SURFACE;
@@ -264,10 +285,13 @@ export function buildAmbientTheme(
     (preferences.scheme === "auto" && prefersDark);
   const points = resolveAmbientPoints(preferences);
   const colors = points.map(pointToRgb);
+  // The picker swatches keep the literal chosen colors; the painted gradient
+  // lifts each into a visible band so the hue reads on the active surface.
+  const tintColors = colors.map((color) => ensureVisibleTint(color, isDark));
   const gradientCss =
     preferences.harmony === "floating"
-      ? floatingGradient(colors, preferences.opacity, preferences.rotation)
-      : layeredGradient(colors, preferences.opacity, preferences.rotation);
+      ? floatingGradient(tintColors, preferences.opacity, preferences.rotation)
+      : layeredGradient(tintColors, preferences.opacity, preferences.rotation);
   const accent = ensureContrast(colors[0] ?? [128, 128, 128], isDark);
 
   return { colors, gradientCss, isDark, points, accent };

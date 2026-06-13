@@ -153,6 +153,7 @@ _Avoid_: Modal dialog, route history stack, multi-pane split
 - Closing a satellite window hides its UI but does not necessarily stop background behavior.
 - Closing a Custom Satellite Instance preserves its state and geometry so it can be reopened.
 - Permanently deleting a Custom Satellite Instance requires a separate explicit action.
+- Permanently deleting a Custom Satellite Type removes all of its Custom Satellite Instances and their persisted data.
 - Custom Satellite Types are user-defined; built-in Satellite Types remain fixed by Gravity.
 - A running Pomodoro continues in the background and emits a toast notification with sound when a phase ends.
 - A **Reminder** can fire whether or not the Calendar window is open.

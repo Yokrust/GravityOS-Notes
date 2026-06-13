@@ -104,6 +104,7 @@ export interface PersistencePort {
   loadCustomSatelliteImage(
     imageId: string
   ): Promise<CustomSatelliteImageAsset | null>;
+  deleteCustomSatelliteType(customTypeId: string): Promise<void>;
   deleteCustomSatelliteInstance(instanceId: string): Promise<void>;
   getRun(runId: string): Promise<Run | null>;
   deleteThreadData(threadId: string): Promise<void>;

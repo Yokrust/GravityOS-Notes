@@ -204,6 +204,13 @@ export class CustomSatelliteService {
     await this.persistence.deleteCustomSatelliteInstance(instanceId);
   }
 
+  async deleteType(customTypeId: string): Promise<CustomSatelliteState> {
+    const state = await this.hydrate();
+    requireCustomType(state, customTypeId);
+    await this.persistence.deleteCustomSatelliteType(customTypeId);
+    return this.hydrate();
+  }
+
   private async setInstanceVisibility(
     instanceId: string,
     isOpen: boolean
