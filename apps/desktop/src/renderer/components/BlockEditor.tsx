@@ -1,4 +1,7 @@
 import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
   Bold,
   CheckSquare,
   Code2,
@@ -8,20 +11,27 @@ import {
   Heading2,
   Heading3,
   Highlighter,
+  Image as ImageIcon,
   Italic,
   List,
   Link2,
   Minus,
   Quote,
   RemoveFormatting,
+  SlidersHorizontal,
   Strikethrough,
   Table as TableIcon,
+  TextAlignJustify,
   Trash2,
   Type,
-  Underline
+  Underline,
+  Video,
+  Rows3
 } from "lucide-react";
 import hljs from "highlight.js/lib/common";
 import type {
+  ClipboardEvent as ReactClipboardEvent,
+  DragEvent as ReactDragEvent,
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
@@ -53,6 +63,8 @@ export type BlockType =
   | "todo"
   | "code"
   | "divider"
+  | "image"
+  | "video"
   | "table";
 
 export interface Block {
@@ -62,7 +74,27 @@ export interface Block {
   checked?: boolean;
   language?: string | undefined;
   rows?: string[][];
+  alt?: string;
+  source?: string;
+  width?: number;
+  alignment?: MediaAlignment;
+  mediaGroup?: string;
+  mediaWrap?: MediaWrap;
+  textAlignment?: TextAlignment;
 }
+
+export type MediaAlignment = "left" | "center" | "right";
+export type MediaWrap = "none" | "left" | "right";
+export type TextAlignment = "left" | "center" | "right" | "justify";
+
+export type PastedNoteImage =
+  | {
+      bytes: Uint8Array;
+      fileName: string;
+      kind: "bytes";
+      mimeType: string;
+    }
+  | { kind: "url"; source: string };
 
 const emptyBlock = (type: BlockType = "p"): Block => {
   if (type === "divider") return { id: uid(), type, text: "" };
@@ -88,9 +120,48 @@ export function parseMarkdown(src: string): Block[] {
   let index = 0;
 
   while (index < lines.length) {
-    const line = lines[index];
-    if (line === undefined) break;
+    const rawLine = lines[index];
+    if (rawLine === undefined) break;
 
+    const image = rawLine.match(
+      /^!\[([^\]]*)\]\(([^)\s]+)\)(?:\{width=(\d+)%(?:\s+align=(left|center|right))?(?:\s+wrap=(none|left|right))?(?:\s+group=([a-zA-Z0-9_-]+))?\})?$/
+    );
+    if (image) {
+      blocks.push({
+        alignment: normalizeMediaAlignment(image[4]),
+        alt: image[1] ?? "",
+        id: uid(),
+        mediaWrap: normalizeMediaWrap(image[5]),
+        ...(image[6] ? { mediaGroup: image[6] } : {}),
+        source: image[2] ?? "",
+        text: "",
+        type: "image",
+        width: normalizeMediaWidth(Number(image[3] ?? 100))
+      });
+      index += 1;
+      continue;
+    }
+
+    const video = rawLine.match(
+      /^\[Video(?:: ([^\]]+))?\]\(([^)\s]+)\)(?:\{width=(\d+)%(?:\s+align=(left|center|right))?(?:\s+wrap=(none|left|right))?(?:\s+group=([a-zA-Z0-9_-]+))?\})?$/i
+    );
+    if (video && normalizeVideoSource(video[2] ?? "")) {
+      blocks.push({
+        alignment: normalizeMediaAlignment(video[4]),
+        alt: video[1] ?? "Video",
+        id: uid(),
+        mediaWrap: normalizeMediaWrap(video[5]),
+        ...(video[6] ? { mediaGroup: video[6] } : {}),
+        source: video[2] ?? "",
+        text: "",
+        type: "video",
+        width: normalizeMediaWidth(Number(video[3] ?? 100))
+      });
+      index += 1;
+      continue;
+    }
+
+    const { content: line, textAlignment } = parseTextAlignment(rawLine);
     const codeFence = line.match(/^```([A-Za-z0-9_+#.-]*)\s*$/);
     if (codeFence) {
       index += 1;
@@ -153,7 +224,8 @@ export function parseMarkdown(src: string): Block[] {
       blocks.push({
         id: uid(),
         type: `h${level}` as "h1" | "h2" | "h3",
-        text: heading[2] ?? ""
+        text: heading[2] ?? "",
+        textAlignment
       });
       index += 1;
       continue;
@@ -163,7 +235,8 @@ export function parseMarkdown(src: string): Block[] {
       blocks.push({
         id: uid(),
         type: "quote",
-        text: line.replace(/^>\s+/, "")
+        text: line.replace(/^>\s+/, ""),
+        textAlignment
       });
       index += 1;
       continue;
@@ -175,7 +248,8 @@ export function parseMarkdown(src: string): Block[] {
         id: uid(),
         type: "todo",
         text: todo[2] ?? "",
-        checked: (todo[1] ?? "").toLowerCase() === "x"
+        checked: (todo[1] ?? "").toLowerCase() === "x",
+        textAlignment
       });
       index += 1;
       continue;
@@ -185,7 +259,8 @@ export function parseMarkdown(src: string): Block[] {
       blocks.push({
         id: uid(),
         type: "bullet",
-        text: line.replace(/^[-*]\s+/, "")
+        text: line.replace(/^[-*]\s+/, ""),
+        textAlignment
       });
       index += 1;
       continue;
@@ -196,30 +271,24 @@ export function parseMarkdown(src: string): Block[] {
       continue;
     }
 
-    blocks.push({ id: uid(), type: "p", text: line });
+    blocks.push({ id: uid(), type: "p", text: line, textAlignment });
     index += 1;
   }
 
-  if (!blocks.length) return [emptyBlock()];
-  for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
-    if (blocks[blockIndex]?.type !== "table") continue;
-    if (blockIndex === 0 || isStructuralBlock(blocks[blockIndex - 1])) {
-      blocks.splice(blockIndex, 0, emptyBlock());
-      blockIndex += 1;
-    }
-    if (
-      blockIndex === blocks.length - 1 ||
-      isStructuralBlock(blocks[blockIndex + 1])
-    ) {
-      blocks.splice(blockIndex + 1, 0, emptyBlock());
-    }
-  }
-  if (blocks.at(-1)?.type === "divider") blocks.push(emptyBlock());
-  return blocks;
+  return ensureStructuralWritingBlocks(blocks);
 }
 
 export function inlineMarkdownToPlainText(value: string): string {
   return value
+    .replace(
+      /^!\[[^\]]*\]\([^)]+\)(?:\{width=\d+%(?:\s+align=(?:left|center|right))?(?:\s+wrap=(?:none|left|right))?(?:\s+group=[a-zA-Z0-9_-]+)?\})?$/gm,
+      ""
+    )
+    .replace(
+      /^\[Video(?:: [^\]]+)?\]\([^)]+\)(?:\{width=\d+%(?:\s+align=(?:left|center|right))?(?:\s+wrap=(?:none|left|right))?(?:\s+group=[a-zA-Z0-9_-]+)?\})?$/gim,
+      ""
+    )
+    .replace(/\s*\{text-align=(?:left|center|right|justify)\}$/gm, "")
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
     .replace(/==\{(?:yellow|green|blue|pink|purple)\}(.+?)==/g, "$1")
     .replace(/==(.+?)==/g, "$1")
@@ -367,6 +436,7 @@ type InlineFormat =
   | "underline";
 
 interface InlineSelectionState {
+  alignment: TextAlignment;
   blockId: string;
   formats: InlineFormat[];
   rect: { bottom: number; left: number; top: number; width: number };
@@ -455,25 +525,27 @@ export function serializeBlocks(blocks: Block[]): string {
   for (const block of blocks) {
     switch (block.type) {
       case "p":
-        output.push(block.text, "");
+        output.push(`${block.text}${serializeTextAlignment(block)}`, "");
         break;
       case "h1":
-        output.push(`# ${block.text}`, "");
+        output.push(`# ${block.text}${serializeTextAlignment(block)}`, "");
         break;
       case "h2":
-        output.push(`## ${block.text}`, "");
+        output.push(`## ${block.text}${serializeTextAlignment(block)}`, "");
         break;
       case "h3":
-        output.push(`### ${block.text}`, "");
+        output.push(`### ${block.text}${serializeTextAlignment(block)}`, "");
         break;
       case "quote":
-        output.push(`> ${block.text}`, "");
+        output.push(`> ${block.text}${serializeTextAlignment(block)}`, "");
         break;
       case "bullet":
-        output.push(`- ${block.text}`);
+        output.push(`- ${block.text}${serializeTextAlignment(block)}`);
         break;
       case "todo":
-        output.push(`- [${block.checked ? "x" : " "}] ${block.text}`);
+        output.push(
+          `- [${block.checked ? "x" : " "}] ${block.text}${serializeTextAlignment(block)}`
+        );
         break;
       case "code":
         output.push(`\`\`\`${block.language ?? ""}`, block.text, "```", "");
@@ -481,6 +553,20 @@ export function serializeBlocks(blocks: Block[]): string {
       case "divider":
         output.push("---", "");
         break;
+      case "image":
+        output.push(
+          `![${escapeMediaLabel(block.alt ?? "")}](${block.source ?? ""})${serializeMediaAttributes(block)}`,
+          ""
+        );
+        break;
+      case "video": {
+        const video = normalizeVideoSource(block.source ?? "");
+        output.push(
+          `[Video: ${escapeMediaLabel(video?.provider ?? block.alt ?? "Video")}](${block.source ?? ""})${serializeMediaAttributes(block)}`,
+          ""
+        );
+        break;
+      }
       case "table": {
         const rows = block.rows ?? [["", ""]];
         const width = rows[0]?.length ?? 2;
@@ -546,6 +632,179 @@ export function replaceBlockWithTable(
   ];
 }
 
+export function replaceBlockWithMedia(
+  blocks: Block[],
+  id: string,
+  media: Block
+): Block[] {
+  const index = blocks.findIndex((block) => block.id === id);
+  if (index < 0) return blocks;
+  return ensureStructuralWritingBlocks([
+    ...blocks.slice(0, index),
+    { ...media, id },
+    ...blocks.slice(index + 1)
+  ]);
+}
+
+export function ensureStructuralWritingBlocks(blocks: Block[]): Block[] {
+  if (!blocks.length) return [emptyBlock()];
+
+  const next: Block[] = [];
+  for (const block of blocks) {
+    const previous = next.at(-1);
+    const continuesMediaGroup =
+      isMediaBlock(block) &&
+      isMediaBlock(previous) &&
+      Boolean(block.mediaGroup) &&
+      block.mediaGroup === previous?.mediaGroup;
+    if (
+      isStructuralBlock(block) &&
+      !continuesMediaGroup &&
+      (next.length === 0 || isStructuralBlock(previous))
+    ) {
+      next.push(emptyBlock());
+    }
+    next.push(block);
+  }
+  if (isStructuralBlock(next.at(-1))) next.push(emptyBlock());
+  return next;
+}
+
+export type MediaInserterPosition = "after" | "before" | "between";
+
+export function getMediaInserterPosition(
+  blocks: Block[],
+  index: number
+): MediaInserterPosition | null {
+  const block = blocks[index];
+  if (block?.type !== "p" || block.text.trim()) return null;
+
+  // Any structural block (code, table, divider, image, video) gets the same
+  // collapsed "click to keep writing" strip on its empty neighbours.
+  const hasStructuralBefore = isStructuralBlock(blocks[index - 1]);
+  const hasStructuralAfter = isStructuralBlock(blocks[index + 1]);
+  if (hasStructuralBefore && hasStructuralAfter) return "between";
+  if (hasStructuralBefore) return "after";
+  if (hasStructuralAfter) return "before";
+  return null;
+}
+
+const PASTED_IMAGE_TYPES = new Set([
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp"
+]);
+
+export function normalizePastedImageUrl(value: string): string | null {
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+const IMAGE_URL_PATTERN = /\.(?:gif|jpe?g|png|webp|avif)(?:[?#].*)?$/i;
+
+function imageFileFromTransfer(data: DataTransfer): File | null {
+  const directFile = Array.from(data.files ?? []).find((candidate) =>
+    PASTED_IMAGE_TYPES.has(candidate.type.toLowerCase())
+  );
+  if (directFile) return directFile;
+
+  // Images copied from a browser frequently arrive as a clipboard/drag *item*
+  // (kind="file") rather than in `files`. `getAsFile` must run synchronously
+  // while the originating paste/drop event is still being handled.
+  for (const item of Array.from(data.items ?? [])) {
+    if (
+      item.kind === "file" &&
+      PASTED_IMAGE_TYPES.has(item.type.toLowerCase())
+    ) {
+      const file = item.getAsFile();
+      if (file) return file;
+    }
+  }
+  return null;
+}
+
+export function clipboardImageSource(data: DataTransfer): File | string | null {
+  // Real bytes first: works offline and avoids CORS/hotlink failures.
+  const file = imageFileFromTransfer(data);
+  if (file) return file;
+
+  const html = data.getData("text/html");
+  if (html) {
+    const source =
+      (typeof DOMParser !== "undefined"
+        ? new DOMParser()
+            .parseFromString(html, "text/html")
+            .querySelector("img[src]")
+            ?.getAttribute("src")
+        : null) ??
+      // Fallback for environments without DOMParser (and as a safety net).
+      html.match(/<img\b[^>]*?\ssrc\s*=\s*["']([^"']+)["']/i)?.[1];
+    if (source) return source;
+  }
+
+  // `text/uri-list` is the canonical payload when dragging an image out of a
+  // browser (e.g. Pinterest); fall back to `text/plain` for plain links.
+  const candidates = [
+    ...data.getData("text/uri-list").split(/\r?\n/),
+    data.getData("text/plain")
+  ]
+    .map((value) => value.trim())
+    .filter((value) => value && !value.startsWith("#"));
+  for (const candidate of candidates) {
+    if (
+      candidate.startsWith("data:image/") ||
+      IMAGE_URL_PATTERN.test(candidate)
+    ) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+export function dataTransferHasImage(data: DataTransfer | null): boolean {
+  if (!data) return false;
+  const types = Array.from(data.types ?? []);
+  // Only claim drags that carry a file or an external URL. Plain/rich text
+  // drags (e.g. moving a selection inside the editor) are intentionally left
+  // to the browser so internal text drag-and-drop keeps working.
+  return types.includes("Files") || types.includes("text/uri-list");
+}
+
+async function readPastedImage(
+  source: File | string
+): Promise<PastedNoteImage | null> {
+  if (source instanceof File) {
+    return {
+      bytes: new Uint8Array(await source.arrayBuffer()),
+      fileName: source.name || "imagen",
+      kind: "bytes",
+      mimeType: source.type
+    };
+  }
+  if (source.startsWith("data:image/")) {
+    const match = source.match(/^data:([^;,]+)(;base64)?,(.*)$/s);
+    if (!match || !PASTED_IMAGE_TYPES.has(match[1]?.toLowerCase() ?? "")) {
+      return null;
+    }
+    const decoded = match[2]
+      ? atob(match[3] ?? "")
+      : decodeURIComponent(match[3] ?? "");
+    return {
+      bytes: Uint8Array.from(decoded, (character) => character.charCodeAt(0)),
+      fileName: "imagen",
+      kind: "bytes",
+      mimeType: match[1] ?? ""
+    };
+  }
+  const url = normalizePastedImageUrl(source);
+  return url ? { kind: "url", source: url } : null;
+}
+
 export function deleteEmptyBlock(
   blocks: Block[],
   id: string,
@@ -555,7 +814,7 @@ export function deleteEmptyBlock(
   if (index < 0) return { blocks, focusId: null };
 
   const previous = blocks[index - 1];
-  if (previous && isStructuralBlock(previous)) {
+  if (previous?.type === "divider" || previous?.type === "table") {
     return {
       blocks: [...blocks.slice(0, index - 1), ...blocks.slice(index)],
       focusId: id
@@ -571,7 +830,369 @@ export function deleteEmptyBlock(
 }
 
 function isStructuralBlock(block: Block | undefined): boolean {
-  return block?.type === "divider" || block?.type === "table";
+  return (
+    block?.type === "code" ||
+    block?.type === "divider" ||
+    block?.type === "image" ||
+    block?.type === "table" ||
+    block?.type === "video"
+  );
+}
+
+type MediaBlockValue = Block & { type: "image" | "video" };
+
+function isMediaBlock(block: Block | undefined): block is MediaBlockValue {
+  return block?.type === "image" || block?.type === "video";
+}
+
+const MEDIA_GROUP_MAX_ITEMS = 4;
+const MEDIA_GROUP_MIN_WIDTH = 12;
+const MEDIA_WRAP_DEFAULT_WIDTH = 48;
+
+export function isWrappableTextBlock(block: Block | undefined): boolean {
+  return !!block && !isStructuralBlock(block) && block.text.trim().length > 0;
+}
+
+// Dropping a media block onto a text block anchors the media just before that
+// block and turns on side wrapping, so the float engine flows the text around
+// it (Word-style "square" wrap, anchored to one side).
+export function anchorMediaToBlock(
+  blocks: Block[],
+  mediaId: string,
+  targetId: string,
+  side: "left" | "right"
+): Block[] {
+  if (mediaId === targetId) return blocks;
+  const media = blocks.find((block) => block.id === mediaId);
+  const target = blocks.find((block) => block.id === targetId);
+  if (!isMediaBlock(media) || !isWrappableTextBlock(target)) return blocks;
+
+  const wrapped: Block = {
+    ...makeStandaloneMediaBlock(media),
+    alignment: side,
+    mediaWrap: side,
+    width:
+      media.width && media.width < 100 ? media.width : MEDIA_WRAP_DEFAULT_WIDTH
+  };
+
+  const next = blocks.filter((block) => block.id !== mediaId);
+  const targetIndex = next.findIndex((block) => block.id === targetId);
+  if (targetIndex < 0) return blocks;
+  next.splice(targetIndex, 0, wrapped);
+
+  return ensureStructuralWritingBlocks(normalizeMediaGroups(next));
+}
+
+export function groupMediaBlocks(
+  blocks: Block[],
+  sourceId: string,
+  targetId: string,
+  side: "left" | "right",
+  groupId: string
+): Block[] {
+  if (sourceId === targetId) return blocks;
+  const source = blocks.find((block) => block.id === sourceId);
+  const target = blocks.find((block) => block.id === targetId);
+  if (!isMediaBlock(source) || !isMediaBlock(target)) return blocks;
+
+  const targetMembers = target.mediaGroup
+    ? blocks.filter((block) => block.mediaGroup === target.mediaGroup)
+    : [target];
+  if (
+    !targetMembers.some((block) => block.id === sourceId) &&
+    targetMembers.length >= MEDIA_GROUP_MAX_ITEMS
+  ) {
+    return blocks;
+  }
+
+  const next = blocks.filter((block) => block.id !== sourceId);
+  const targetIndex = next.findIndex((block) => block.id === targetId);
+  if (targetIndex < 0) return blocks;
+  next.splice(targetIndex + (side === "right" ? 1 : 0), 0, source);
+
+  const activeGroup = target.mediaGroup ?? groupId;
+  const memberIds = new Set(
+    next
+      .filter(
+        (block) =>
+          block.id === sourceId ||
+          block.id === targetId ||
+          block.mediaGroup === activeGroup
+      )
+      .map((block) => block.id)
+  );
+  const equalWidth = 100 / memberIds.size;
+
+  const sourceGroup = source.mediaGroup;
+  const sourceGroupRemaining = sourceGroup
+    ? next.filter((block) => block.mediaGroup === sourceGroup)
+    : [];
+
+  return ensureStructuralWritingBlocks(
+    normalizeMediaGroups(
+      next.map((block) => {
+        if (memberIds.has(block.id)) {
+          return {
+            ...block,
+            alignment: "center",
+            mediaGroup: activeGroup,
+            mediaWrap: "none",
+            width: equalWidth
+          };
+        }
+        if (
+          sourceGroup &&
+          sourceGroup !== activeGroup &&
+          sourceGroupRemaining.length === 1 &&
+          block.id === sourceGroupRemaining[0]?.id
+        ) {
+          return makeStandaloneMediaBlock(block);
+        }
+        return block;
+      })
+    )
+  );
+}
+
+export function resizeMediaGroupWidths(
+  widths: number[],
+  activeIndex: number,
+  targetWidth: number
+): number[] {
+  if (widths.length < 2 || activeIndex < 0 || activeIndex >= widths.length) {
+    return widths;
+  }
+  const maximum = 100 - MEDIA_GROUP_MIN_WIDTH * (widths.length - 1);
+  const activeWidth = clamp(targetWidth, MEDIA_GROUP_MIN_WIDTH, maximum);
+  const remaining = 100 - activeWidth;
+  const otherTotal = widths.reduce(
+    (sum, width, index) => sum + (index === activeIndex ? 0 : width),
+    0
+  );
+  const next = widths.map((width, index) =>
+    index === activeIndex
+      ? activeWidth
+      : otherTotal > 0
+        ? (width / otherTotal) * remaining
+        : remaining / (widths.length - 1)
+  );
+
+  let deficit = 0;
+  for (let index = 0; index < next.length; index += 1) {
+    if (index !== activeIndex && (next[index] ?? 0) < MEDIA_GROUP_MIN_WIDTH) {
+      deficit += MEDIA_GROUP_MIN_WIDTH - (next[index] ?? 0);
+      next[index] = MEDIA_GROUP_MIN_WIDTH;
+    }
+  }
+  next[activeIndex] = Math.max(
+    MEDIA_GROUP_MIN_WIDTH,
+    (next[activeIndex] ?? activeWidth) - deficit
+  );
+  return next;
+}
+
+function makeStandaloneMediaBlock(block: Block): Block {
+  const standalone = { ...block };
+  delete standalone.mediaGroup;
+  return { ...standalone, width: 100 };
+}
+
+function normalizeMediaGroups(blocks: Block[]): Block[] {
+  const groups = new Map<string, Block[]>();
+  for (const block of blocks) {
+    if (block.mediaGroup) {
+      const members = groups.get(block.mediaGroup) ?? [];
+      members.push(block);
+      groups.set(block.mediaGroup, members);
+    }
+  }
+
+  return blocks.map((block) => {
+    if (!block.mediaGroup) return block;
+    const members = groups.get(block.mediaGroup) ?? [];
+    if (members.length <= 1) {
+      return makeStandaloneMediaBlock(block);
+    }
+    const total = members.reduce(
+      (sum, member) => sum + (member.width ?? 100 / members.length),
+      0
+    );
+    return {
+      ...block,
+      width:
+        total > 0
+          ? ((block.width ?? 100 / members.length) / total) * 100
+          : 100 / members.length
+    };
+  });
+}
+
+export function normalizeMediaWidth(value: number): number {
+  return Math.round(clampMediaWidth(value));
+}
+
+export function clampMediaWidth(value: number): number {
+  return clamp(value, 25, 100);
+}
+
+export function normalizeMediaAlignment(
+  value: string | undefined
+): MediaAlignment {
+  return value === "left" || value === "right" ? value : "center";
+}
+
+export function normalizeMediaWrap(value: string | undefined): MediaWrap {
+  return value === "left" || value === "right" ? value : "none";
+}
+
+export function normalizeTextAlignment(
+  value: string | undefined
+): TextAlignment {
+  return value === "center" || value === "right" || value === "justify"
+    ? value
+    : "left";
+}
+
+function parseTextAlignment(line: string): {
+  content: string;
+  textAlignment: TextAlignment;
+} {
+  const match = line.match(
+    /^(.*?)(?:\s+\{text-align=(left|center|right|justify)\})$/
+  );
+  return {
+    content: match?.[1] ?? line,
+    textAlignment: normalizeTextAlignment(match?.[2])
+  };
+}
+
+function serializeTextAlignment(block: Block): string {
+  const alignment = normalizeTextAlignment(block.textAlignment);
+  return alignment === "left" ? "" : ` {text-align=${alignment}}`;
+}
+
+export function resolveMediaDragWidth({
+  alignment,
+  containerWidth,
+  edge,
+  pointerX,
+  startPointerX,
+  startWidth
+}: {
+  alignment: MediaAlignment;
+  containerWidth: number;
+  edge: "left" | "right";
+  pointerX: number;
+  startPointerX: number;
+  startWidth: number;
+}): number {
+  if (containerWidth <= 0) return clampMediaWidth(startWidth);
+  const delta =
+    edge === "left" ? startPointerX - pointerX : pointerX - startPointerX;
+  const movementScale = alignment === "center" ? 2 : 1;
+  return clampMediaWidth(
+    startWidth + (delta / containerWidth) * 100 * movementScale
+  );
+}
+
+function serializeMediaAttributes(block: Block): string {
+  const alignment = normalizeMediaAlignment(block.alignment);
+  const wrap = normalizeMediaWrap(block.mediaWrap);
+  return `{width=${normalizeMediaWidth(block.width ?? 100)}%${
+    alignment === "center" ? "" : ` align=${alignment}`
+  }${wrap === "none" ? "" : ` wrap=${wrap}`}${
+    block.mediaGroup ? ` group=${block.mediaGroup}` : ""
+  }}`;
+}
+
+function escapeMediaLabel(value: string): string {
+  return value.replace(/[[\]]/g, "").trim();
+}
+
+export interface VideoSource {
+  embedUrl: string;
+  kind: "direct" | "embed";
+  provider: string;
+}
+
+export function normalizeVideoSource(value: string): VideoSource | null {
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== "https:") return null;
+    const host = url.hostname.replace(/^www\./, "").toLowerCase();
+
+    if (host === "youtu.be") {
+      const id = url.pathname.split("/").filter(Boolean)[0];
+      return id && isSafeVideoId(id)
+        ? {
+            embedUrl: `https://www.youtube-nocookie.com/embed/${id}`,
+            kind: "embed",
+            provider: "YouTube"
+          }
+        : null;
+    }
+    if (host === "youtube.com" || host === "m.youtube.com") {
+      const pathParts = url.pathname.split("/").filter(Boolean);
+      const id =
+        url.searchParams.get("v") ??
+        (["embed", "shorts"].includes(pathParts[0] ?? "")
+          ? pathParts[1]
+          : null);
+      return id && isSafeVideoId(id)
+        ? {
+            embedUrl: `https://www.youtube-nocookie.com/embed/${id}`,
+            kind: "embed",
+            provider: "YouTube"
+          }
+        : null;
+    }
+    if (host === "vimeo.com" || host === "player.vimeo.com") {
+      const id = url.pathname.split("/").filter(Boolean).at(-1);
+      return id && /^\d+$/.test(id)
+        ? {
+            embedUrl: `https://player.vimeo.com/video/${id}`,
+            kind: "embed",
+            provider: "Vimeo"
+          }
+        : null;
+    }
+    if (host === "loom.com") {
+      const parts = url.pathname.split("/").filter(Boolean);
+      const id = parts.at(-1);
+      return id && isSafeVideoId(id)
+        ? {
+            embedUrl: `https://www.loom.com/embed/${id}`,
+            kind: "embed",
+            provider: "Loom"
+          }
+        : null;
+    }
+    if (host === "dailymotion.com" || host === "dai.ly") {
+      const parts = url.pathname.split("/").filter(Boolean);
+      const id = host === "dai.ly" ? parts[0] : parts.at(-1);
+      return id && isSafeVideoId(id)
+        ? {
+            embedUrl: `https://www.dailymotion.com/embed/video/${id}`,
+            kind: "embed",
+            provider: "Dailymotion"
+          }
+        : null;
+    }
+    if (/\.(mp4|webm|ogg)$/i.test(url.pathname)) {
+      return {
+        embedUrl: url.toString(),
+        kind: "direct",
+        provider: "Video"
+      };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function isSafeVideoId(value: string): boolean {
+  return /^[a-zA-Z0-9_-]+$/.test(value);
 }
 
 const TABLE_MIN_ROWS = 2;
@@ -651,6 +1272,75 @@ export function moveBlockToIndex(
   if (!movedBlock) return blocks;
   next.splice(insertionIndex, 0, movedBlock);
   return next;
+}
+
+export function moveBlockWithWritingBoundaries(
+  blocks: Block[],
+  blockId: string,
+  targetIndex: number
+): Block[] {
+  const source = blocks.find((block) => block.id === blockId);
+  const detached = source?.mediaGroup
+    ? normalizeMediaGroups(
+        blocks.map((block) => {
+          if (block.id !== blockId) return block;
+          return makeStandaloneMediaBlock(block);
+        })
+      )
+    : blocks;
+  return ensureStructuralWritingBlocks(
+    moveBlockToIndex(detached, blockId, targetIndex)
+  );
+}
+
+interface EditorUnit {
+  blocks: Array<{ block: Block; index: number }>;
+  endIndex: number;
+  key: string;
+  startIndex: number;
+}
+
+export function buildEditorUnits(blocks: Block[]): EditorUnit[] {
+  const units: EditorUnit[] = [];
+  let index = 0;
+
+  while (index < blocks.length) {
+    const block = blocks[index];
+    if (!block) break;
+    if (isMediaBlock(block) && block.mediaGroup) {
+      const grouped: Array<{ block: Block; index: number }> = [];
+      let cursor = index;
+      while (
+        cursor < blocks.length &&
+        isMediaBlock(blocks[cursor]) &&
+        blocks[cursor]?.mediaGroup === block.mediaGroup &&
+        grouped.length < MEDIA_GROUP_MAX_ITEMS
+      ) {
+        const member = blocks[cursor];
+        if (member) grouped.push({ block: member, index: cursor });
+        cursor += 1;
+      }
+      if (grouped.length > 1) {
+        units.push({
+          blocks: grouped,
+          endIndex: cursor,
+          key: `media-group-${block.mediaGroup}`,
+          startIndex: index
+        });
+        index = cursor;
+        continue;
+      }
+    }
+
+    units.push({
+      blocks: [{ block, index }],
+      endIndex: index + 1,
+      key: block.id,
+      startIndex: index
+    });
+    index += 1;
+  }
+  return units;
 }
 
 const CODE_LANGUAGE_OPTIONS = [
@@ -816,6 +1506,34 @@ const SLASH_OPTIONS: SlashOption[] = [
     apply: (block) => ({ ...block, type: "divider", text: "" })
   },
   {
+    key: "image",
+    label: "Imagen",
+    hint: "Archivo local redimensionable",
+    icon: <ImageIcon size={14} />,
+    match: ["image", "imagen", "foto", "picture", "gif", "gifs"],
+    apply: (block) => ({
+      ...block,
+      alignment: "center",
+      type: "image",
+      text: "",
+      width: 100
+    })
+  },
+  {
+    key: "video",
+    label: "Video",
+    hint: "YouTube, Vimeo, Loom y más",
+    icon: <Video size={14} />,
+    match: ["video", "youtube", "vimeo", "loom"],
+    apply: (block) => ({
+      ...block,
+      alignment: "center",
+      type: "video",
+      text: "",
+      width: 100
+    })
+  },
+  {
     key: "table",
     label: "Tabla",
     hint: "2 × 2 editable",
@@ -834,11 +1552,21 @@ const SLASH_OPTIONS: SlashOption[] = [
 ];
 
 export function BlockEditor({
+  loadImage,
   onChange,
+  onChooseImage,
+  onPasteImage,
   value
 }: {
   value: string;
   onChange: (next: string) => void;
+  onChooseImage?: () => Promise<{ alt: string; source: string } | null>;
+  onPasteImage?: (
+    input: PastedNoteImage
+  ) => Promise<{ alt: string; source: string }>;
+  loadImage?: (
+    source: string
+  ) => Promise<{ bytes: Uint8Array; mimeType: string }>;
 }) {
   const [blocks, setBlocks] = useState<Block[]>(() => parseMarkdown(value));
   const [focusRequest, setFocusRequest] = useState<{ id: string } | null>(null);
@@ -850,6 +1578,9 @@ export function BlockEditor({
   const [blockDrag, setBlockDrag] = useState<BlockDragState | null>(null);
   const [inlineSelection, setInlineSelection] =
     useState<InlineSelectionState | null>(null);
+  const [videoDialogBlockId, setVideoDialogBlockId] = useState<string | null>(
+    null
+  );
   const blockDragRef = useRef<BlockDragState | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
   const inlineRangeRef = useRef<Range | null>(null);
@@ -871,6 +1602,24 @@ export function BlockEditor({
       onChange(serialized);
     }
   }, [blocks, onChange]);
+
+  useEffect(() => {
+    if (!slash) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (
+        target.closest("[data-slash-menu]") ||
+        target.closest(`[data-editor-block-id="${CSS.escape(slash.blockId)}"]`)
+      ) {
+        return;
+      }
+      setSlash(null);
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer, true);
+    return () =>
+      document.removeEventListener("pointerdown", closeOnOutsidePointer, true);
+  }, [slash]);
 
   const updateBlock = useCallback((id: string, patch: Partial<Block>) => {
     setBlocks((current) =>
@@ -949,6 +1698,7 @@ export function BlockEditor({
 
         inlineRangeRef.current = range.cloneRange();
         setInlineSelection({
+          alignment: normalizeTextAlignment(startEditor.dataset.textAlignment),
           blockId: startEditor.dataset.inlineEditorId ?? "",
           formats,
           rect: {
@@ -982,7 +1732,12 @@ export function BlockEditor({
 
   const applyInlineFormat = useCallback(
     (
-      format: InlineFormat | "clear" | "highlight" | "remove-highlight",
+      format:
+        | InlineFormat
+        | "alignment"
+        | "clear"
+        | "highlight"
+        | "remove-highlight",
       value?: string
     ) => {
       const current = inlineSelection;
@@ -1006,7 +1761,13 @@ export function BlockEditor({
       selection?.addRange(savedRange);
 
       let nextRange: Range | null = savedRange;
-      if (
+      if (format === "alignment") {
+        const alignment = normalizeTextAlignment(value);
+        updateBlock(current.blockId, { textAlignment: alignment });
+        setInlineSelection((selectionState) =>
+          selectionState ? { ...selectionState, alignment } : null
+        );
+      } else if (
         format === "bold" ||
         format === "italic" ||
         format === "underline" ||
@@ -1108,12 +1869,14 @@ export function BlockEditor({
         ? (next[index] ?? next[index - 1])
         : next[Math.max(0, index - 1)];
       if (target) setFocusRequest({ id: target.id });
-      return next;
+      return ensureStructuralWritingBlocks(normalizeMediaGroups(next));
     });
   }, []);
 
   const moveBlock = useCallback((id: string, targetIndex: number) => {
-    setBlocks((current) => moveBlockToIndex(current, id, targetIndex));
+    setBlocks((current) =>
+      moveBlockWithWritingBoundaries(current, id, targetIndex)
+    );
     setFocusRequest({ id });
   }, []);
 
@@ -1132,6 +1895,8 @@ export function BlockEditor({
         blockId: block.id,
         dropIndex: null,
         label: getBlockLabel(block),
+        mediaDrop: null,
+        wrapDrop: null,
         overTrash: false,
         pointerId: event.pointerId,
         preview: getBlockPreview(block),
@@ -1174,6 +1939,8 @@ export function BlockEditor({
       const editor = editorRef.current;
       const editorBounds = editor?.getBoundingClientRect();
       let dropIndex: number | null = null;
+      let mediaDrop: BlockDragState["mediaDrop"] = null;
+      let wrapDrop: BlockDragState["wrapDrop"] = null;
 
       if (
         active &&
@@ -1185,19 +1952,83 @@ export function BlockEditor({
         event.clientY >= editorBounds.top - 24 &&
         event.clientY <= editorBounds.bottom + 24
       ) {
-        const blockElements = Array.from(
-          editor.querySelectorAll<HTMLElement>(":scope > .editor-block")
+        const sourceBlock = blocks.find(
+          (block) => block.id === current.blockId
         );
-        const candidateIndex = blockElements.findIndex((element) => {
+        const pointedMedia = document
+          .elementFromPoint(event.clientX, event.clientY)
+          ?.closest<HTMLElement>("[data-media-block-id]");
+        const targetId = pointedMedia?.dataset.mediaBlockId;
+        const targetBlock = blocks.find((block) => block.id === targetId);
+        const targetGroupSize = targetBlock?.mediaGroup
+          ? blocks.filter(
+              (block) => block.mediaGroup === targetBlock.mediaGroup
+            ).length
+          : 1;
+        if (
+          isMediaBlock(sourceBlock) &&
+          isMediaBlock(targetBlock) &&
+          typeof targetId === "string" &&
+          targetId !== current.blockId &&
+          (sourceBlock?.mediaGroup === targetBlock?.mediaGroup ||
+            targetGroupSize < MEDIA_GROUP_MAX_ITEMS)
+        ) {
+          const bounds = pointedMedia?.getBoundingClientRect();
+          if (bounds) {
+            mediaDrop = {
+              side:
+                event.clientX < bounds.left + bounds.width / 2
+                  ? "left"
+                  : "right",
+              targetId
+            };
+          }
+        }
+
+        // Dropping a media block onto a text block wraps that text around it.
+        if (isMediaBlock(sourceBlock) && !mediaDrop) {
+          const pointedBlock = document
+            .elementFromPoint(event.clientX, event.clientY)
+            ?.closest<HTMLElement>("[data-editor-block-id]");
+          const wrapTargetId = pointedBlock?.dataset.editorBlockId;
+          const wrapTarget = blocks.find((block) => block.id === wrapTargetId);
+          if (
+            pointedBlock &&
+            typeof wrapTargetId === "string" &&
+            wrapTargetId !== current.blockId &&
+            isWrappableTextBlock(wrapTarget)
+          ) {
+            const bounds = pointedBlock.getBoundingClientRect();
+            wrapDrop = {
+              side:
+                event.clientX < bounds.left + bounds.width / 2
+                  ? "left"
+                  : "right",
+              targetId: wrapTargetId
+            };
+          }
+        }
+
+        const unitElements = Array.from(
+          editor.querySelectorAll<HTMLElement>(":scope > [data-editor-unit]")
+        );
+        const candidateIndex = unitElements.findIndex((element) => {
           const bounds = element.getBoundingClientRect();
           return event.clientY < bounds.top + bounds.height / 2;
         });
         const nextIndex =
-          candidateIndex < 0 ? blockElements.length : candidateIndex;
-        const sourceIndex = blockElements.findIndex(
-          (element) => element.dataset.editorBlockId === current.blockId
+          candidateIndex < 0
+            ? blocks.length
+            : Number(unitElements[candidateIndex]?.dataset.startIndex ?? 0);
+        const sourceIndex = blocks.findIndex(
+          (block) => block.id === current.blockId
         );
-        if (nextIndex !== sourceIndex && nextIndex !== sourceIndex + 1) {
+        if (
+          !mediaDrop &&
+          !wrapDrop &&
+          nextIndex !== sourceIndex &&
+          nextIndex !== sourceIndex + 1
+        ) {
           dropIndex = nextIndex;
         }
       }
@@ -1206,7 +2037,9 @@ export function BlockEditor({
         ...current,
         active,
         dropIndex,
+        mediaDrop,
         overTrash,
+        wrapDrop,
         x: event.clientX,
         y: event.clientY
       });
@@ -1217,6 +2050,25 @@ export function BlockEditor({
       if (!current || event.pointerId !== current.pointerId) return;
       if (current.active && current.overTrash) {
         removeBlock(current.blockId);
+      } else if (current.active && current.mediaDrop) {
+        setBlocks((currentBlocks) =>
+          groupMediaBlocks(
+            currentBlocks,
+            current.blockId,
+            current.mediaDrop?.targetId ?? "",
+            current.mediaDrop?.side ?? "right",
+            `media-${uid()}`
+          )
+        );
+      } else if (current.active && current.wrapDrop) {
+        setBlocks((currentBlocks) =>
+          anchorMediaToBlock(
+            currentBlocks,
+            current.blockId,
+            current.wrapDrop?.targetId ?? "",
+            current.wrapDrop?.side ?? "left"
+          )
+        );
       } else if (current.active && current.dropIndex !== null) {
         moveBlock(current.blockId, current.dropIndex);
       }
@@ -1236,16 +2088,59 @@ export function BlockEditor({
       window.removeEventListener("pointercancel", cancelDrag);
       window.removeEventListener("blur", cancelDrag);
     };
-  }, [blockDrag?.pointerId, moveBlock, removeBlock, updateBlockDrag]);
+  }, [blockDrag?.pointerId, blocks, moveBlock, removeBlock, updateBlockDrag]);
 
   const removeEmptyBlock = useCallback((id: string) => {
     const fallbackBlock = emptyBlock();
+    setSlash(null);
     setBlocks((current) => {
       const result = deleteEmptyBlock(current, id, fallbackBlock);
       if (result.focusId) setFocusRequest({ id: result.focusId });
-      return result.blocks;
+      return ensureStructuralWritingBlocks(result.blocks);
     });
   }, []);
+
+  const insertImportedImage = useCallback(
+    (id: string, image: { alt: string; source: string }) => {
+      setBlocks((current) => {
+        if (!current.length) return current;
+        // Drops can target a block that no longer exists (or the gap below the
+        // last block); fall back to the final block so the media still lands.
+        const requestedIndex = current.findIndex((block) => block.id === id);
+        const targetIndex =
+          requestedIndex < 0 ? current.length - 1 : requestedIndex;
+        const target = current[targetIndex];
+        const anchorId = target?.id ?? id;
+        // Only consume an empty writing block (the "/image" slash flow); any
+        // block that already holds content keeps it and the media lands after.
+        const replaceTarget =
+          !!target && !isStructuralBlock(target) && !target.text.trim();
+        const mediaId = replaceTarget ? anchorId : uid();
+        const media: Block = {
+          alignment: "center",
+          alt: image.alt,
+          id: mediaId,
+          source: image.source,
+          text: "",
+          type: "image",
+          width: 100
+        };
+        const next = replaceTarget
+          ? replaceBlockWithMedia(current, anchorId, media)
+          : ensureStructuralWritingBlocks([
+              ...current.slice(0, targetIndex + 1),
+              media,
+              ...current.slice(targetIndex + 1)
+            ]);
+        const mediaIndex = next.findIndex((block) => block.id === mediaId);
+        const trailingBlock = next[mediaIndex + 1];
+        if (trailingBlock) setFocusRequest({ id: trailingBlock.id });
+        return next;
+      });
+      setSlash(null);
+    },
+    []
+  );
 
   const insertDivider = useCallback((id: string) => {
     const trailingBlock = emptyBlock();
@@ -1265,64 +2160,286 @@ export function BlockEditor({
     setFocusRequest({ id });
   }, []);
 
+  const insertImage = useCallback(
+    async (id: string) => {
+      const image = await onChooseImage?.();
+      if (!image) {
+        setSlash(null);
+        setFocusRequest({ id });
+        return;
+      }
+      insertImportedImage(id, image);
+    },
+    [insertImportedImage, onChooseImage]
+  );
+
+  // Shared image-insertion pipeline for both pasting and dropping. `targetId`
+  // is the block the media should land on/after (focused block for paste, the
+  // block under the pointer for drop); a missing id falls back to the end.
+  const importTransferImage = useCallback(
+    (targetId: string | null, data: DataTransfer): boolean => {
+      if (!onPasteImage) return false;
+      const source = clipboardImageSource(data);
+      if (!source) return false;
+      void readPastedImage(source)
+        .then((input) => (input ? onPasteImage(input) : null))
+        .then((image) => {
+          if (image) insertImportedImage(targetId ?? "", image);
+        })
+        .catch(() => undefined);
+      return true;
+    },
+    [insertImportedImage, onPasteImage]
+  );
+
+  const handleEditorPaste = useCallback(
+    (event: ReactClipboardEvent<HTMLDivElement>) => {
+      const focusedId =
+        (document.activeElement instanceof HTMLElement
+          ? document.activeElement.closest<HTMLElement>(
+              "[data-inline-editor-id]"
+            )?.dataset.inlineEditorId
+          : null) ?? null;
+      if (importTransferImage(focusedId, event.clipboardData)) {
+        event.preventDefault();
+      }
+    },
+    [importTransferImage]
+  );
+
+  const handleEditorDrop = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (!dataTransferHasImage(event.dataTransfer)) return;
+      const targetId =
+        document
+          .elementFromPoint(event.clientX, event.clientY)
+          ?.closest<HTMLElement>("[data-editor-block-id]")?.dataset
+          .editorBlockId ?? null;
+      if (importTransferImage(targetId, event.dataTransfer)) {
+        event.preventDefault();
+      }
+    },
+    [importTransferImage]
+  );
+
+  const handleEditorDragOver = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (!dataTransferHasImage(event.dataTransfer)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+    },
+    []
+  );
+
+  const insertVideo = useCallback((id: string, source: string) => {
+    const video = normalizeVideoSource(source);
+    if (!video) return;
+    setBlocks((current) => {
+      const next = replaceBlockWithMedia(current, id, {
+        alignment: "center",
+        alt: video.provider,
+        id,
+        source,
+        text: "",
+        type: "video",
+        width: 100
+      });
+      const mediaIndex = next.findIndex((block) => block.id === id);
+      const trailingBlock = next[mediaIndex + 1];
+      if (trailingBlock) setFocusRequest({ id: trailingBlock.id });
+      return next;
+    });
+    setVideoDialogBlockId(null);
+    setSlash(null);
+  }, []);
+
   const changeType = useCallback((id: string, type: BlockType) => {
     setBlocks((current) =>
-      current.map((block) => {
-        if (block.id !== id) return block;
-        const option = SLASH_OPTIONS.find(
-          (candidate) => candidate.key === type
-        );
-        return option ? option.apply(block) : { ...block, type };
-      })
+      // Re-run the structural guard so converting a block into code (now a
+      // structural block) keeps writable paragraphs above and below it.
+      ensureStructuralWritingBlocks(
+        current.map((block) => {
+          if (block.id !== id) return block;
+          const option = SLASH_OPTIONS.find(
+            (candidate) => candidate.key === type
+          );
+          return option ? option.apply(block) : { ...block, type };
+        })
+      )
     );
   }, []);
 
-  return (
-    <div className="relative" ref={editorRef}>
-      {blocks.map((block, index) => (
-        <BlockFrame
-          block={block}
-          dropPosition={
-            blockDrag?.active && blockDrag.dropIndex === index
-              ? "before"
-              : blockDrag?.active &&
-                  blockDrag.dropIndex === blocks.length &&
-                  index === blocks.length - 1
-                ? "after"
-                : null
-          }
-          dragging={Boolean(
-            blockDrag?.active && blockDrag.blockId === block.id
-          )}
-          key={block.id}
-          onDragStart={(event) => beginBlockDrag(event, block)}
-        >
-          <BlockView
-            block={block}
-            focusRequest={focusRequest?.id === block.id ? focusRequest : null}
-            onChangeType={(type) => changeType(block.id, type)}
-            onCloseSlash={() => setSlash(null)}
-            onFocusNext={() => {
-              const nextBlock = blocks[index + 1];
-              if (nextBlock) setFocusRequest({ id: nextBlock.id });
-            }}
-            onFocusPrev={() => {
-              const previousBlock = blocks[index - 1];
-              if (previousBlock) setFocusRequest({ id: previousBlock.id });
-            }}
-            onInsertAfter={(type) => insertAfter(block.id, type)}
-            onInsertDivider={() => insertDivider(block.id)}
-            onInsertTable={() => insertTable(block.id)}
-            onOpenSlash={(query, rect) =>
-              setSlash({ blockId: block.id, query, rect })
+  const updateMediaBlock = useCallback((id: string, patch: Partial<Block>) => {
+    setBlocks((current) => {
+      const target = current.find((block) => block.id === id);
+      if (!target?.mediaGroup || patch.width === undefined) {
+        const { width: patchWidth, ...rest } = patch;
+        return current.map((block) =>
+          block.id === id
+            ? {
+                ...block,
+                ...rest,
+                ...(patchWidth === undefined ? {} : { width: patchWidth })
+              }
+            : block
+        );
+      }
+
+      const members = current.filter(
+        (block) => block.mediaGroup === target.mediaGroup
+      );
+      const activeIndex = members.findIndex((block) => block.id === id);
+      const widths = resizeMediaGroupWidths(
+        members.map((block) => block.width ?? 100 / members.length),
+        activeIndex,
+        patch.width
+      );
+      const widthById = new Map(
+        members.map((block, index) => [
+          block.id,
+          widths[index] ?? block.width ?? 100 / members.length
+        ])
+      );
+      return current.map((block) =>
+        block.mediaGroup === target.mediaGroup
+          ? {
+              ...block,
+              ...(block.id === id ? patch : {}),
+              width:
+                widthById.get(block.id) ?? block.width ?? 100 / members.length
             }
-            onRemove={() => removeBlock(block.id)}
-            onRemoveEmpty={() => removeEmptyBlock(block.id)}
-            onUpdate={(patch) => updateBlock(block.id, patch)}
-            slashOpen={slash?.blockId === block.id}
-          />
-        </BlockFrame>
-      ))}
+          : block
+      );
+    });
+  }, []);
+
+  const editorUnits = useMemo(() => buildEditorUnits(blocks), [blocks]);
+
+  const renderBlock = (
+    block: Block,
+    index: number,
+    grouped: boolean,
+    wrapped: boolean
+  ): ReactNode => {
+    const mediaInserterPosition = getMediaInserterPosition(blocks, index);
+    return (
+      <BlockFrame
+        block={block}
+        dropPosition={null}
+        dragging={Boolean(blockDrag?.active && blockDrag.blockId === block.id)}
+        grouped={grouped}
+        key={block.id}
+        mediaDropSide={
+          blockDrag?.active && blockDrag.mediaDrop?.targetId === block.id
+            ? blockDrag.mediaDrop.side
+            : null
+        }
+        wrapDropSide={
+          blockDrag?.active && blockDrag.wrapDrop?.targetId === block.id
+            ? blockDrag.wrapDrop.side
+            : null
+        }
+        mediaInserterPosition={mediaInserterPosition}
+        onActivateInserter={(rect) => {
+          setFocusRequest({ id: block.id });
+          setSlash({
+            blockId: block.id,
+            query: "",
+            rect: {
+              bottom: rect.bottom,
+              top: rect.top,
+              x: rect.left
+            }
+          });
+        }}
+        onDragStart={(event) => beginBlockDrag(event, block)}
+      >
+        <BlockView
+          block={block}
+          focusRequest={focusRequest?.id === block.id ? focusRequest : null}
+          grouped={grouped}
+          wrapped={wrapped}
+          onChangeType={(type) => changeType(block.id, type)}
+          onCloseSlash={() => setSlash(null)}
+          onFocusNext={() => {
+            const nextBlock = blocks[index + 1];
+            if (nextBlock) setFocusRequest({ id: nextBlock.id });
+          }}
+          onFocusPrev={() => {
+            const previousBlock = blocks[index - 1];
+            if (previousBlock) setFocusRequest({ id: previousBlock.id });
+          }}
+          onInsertAfter={(type) => insertAfter(block.id, type)}
+          onInsertDivider={() => insertDivider(block.id)}
+          onInsertTable={() => insertTable(block.id)}
+          onOpenSlash={(query, rect) =>
+            setSlash({ blockId: block.id, query, rect })
+          }
+          onRemove={() => removeBlock(block.id)}
+          onRemoveEmpty={() => removeEmptyBlock(block.id)}
+          onUpdate={(patch) =>
+            isMediaBlock(block)
+              ? updateMediaBlock(block.id, patch)
+              : updateBlock(block.id, patch)
+          }
+          loadImage={loadImage}
+          slashOpen={slash?.blockId === block.id}
+        />
+      </BlockFrame>
+    );
+  };
+
+  return (
+    <div
+      className="block-editor-root relative"
+      onDragOver={handleEditorDragOver}
+      onDrop={handleEditorDrop}
+      onPaste={handleEditorPaste}
+      ref={editorRef}
+    >
+      {editorUnits.map((unit) => {
+        const grouped = unit.blocks.length > 1;
+        const onlyBlock = unit.blocks[0]?.block;
+        const mediaWrap =
+          !grouped && isMediaBlock(onlyBlock)
+            ? normalizeMediaWrap(onlyBlock.mediaWrap)
+            : "none";
+        const clearsWrappedMedia =
+          grouped ||
+          (isStructuralBlock(onlyBlock) &&
+            (!isMediaBlock(onlyBlock) || mediaWrap === "none"));
+        const dropPosition =
+          blockDrag?.active && blockDrag.dropIndex === unit.startIndex
+            ? "before"
+            : blockDrag?.active &&
+                blockDrag.dropIndex === blocks.length &&
+                unit.endIndex === blocks.length
+              ? "after"
+              : null;
+        return (
+          <div
+            className={`editor-unit ${grouped ? "media-row" : ""} ${
+              mediaWrap !== "none" ? `is-media-wrap is-wrap-${mediaWrap}` : ""
+            } ${clearsWrappedMedia ? "is-wrap-boundary" : ""} ${
+              dropPosition ? `is-drop-${dropPosition}` : ""
+            }`}
+            data-editor-unit
+            data-start-index={unit.startIndex}
+            key={unit.key}
+            style={
+              mediaWrap !== "none"
+                ? {
+                    width: `${normalizeMediaWidth(onlyBlock?.width ?? 100)}%`
+                  }
+                : undefined
+            }
+          >
+            {unit.blocks.map(({ block, index }) =>
+              renderBlock(block, index, grouped, mediaWrap !== "none")
+            )}
+          </div>
+        );
+      })}
 
       {typeof document !== "undefined"
         ? createPortal(
@@ -1337,6 +2454,11 @@ export function BlockEditor({
                       insertDivider(slash.blockId);
                     } else if (type === "table") {
                       insertTable(slash.blockId);
+                    } else if (type === "image") {
+                      void insertImage(slash.blockId);
+                    } else if (type === "video") {
+                      setVideoDialogBlockId(slash.blockId);
+                      setSlash(null);
                     } else {
                       changeType(slash.blockId, type);
                       setSlash(null);
@@ -1344,6 +2466,22 @@ export function BlockEditor({
                     }
                   }}
                   query={slash.query}
+                />
+              ) : null}
+            </AnimatePresence>,
+            document.body
+          )
+        : null}
+      {typeof document !== "undefined"
+        ? createPortal(
+            <AnimatePresence>
+              {videoDialogBlockId ? (
+                <VideoDialog
+                  onClose={() => {
+                    setVideoDialogBlockId(null);
+                    setFocusRequest({ id: videoDialogBlockId });
+                  }}
+                  onSubmit={(source) => insertVideo(videoDialogBlockId, source)}
                 />
               ) : null}
             </AnimatePresence>,
@@ -1369,6 +2507,7 @@ export function BlockEditor({
               {inlineSelection ? (
                 <InlineFormattingToolbar
                   activeFormats={inlineSelection.formats}
+                  alignment={inlineSelection.alignment}
                   anchor={inlineSelection.rect}
                   onFormat={applyInlineFormat}
                   toolbarRef={inlineToolbarRef}
@@ -1387,6 +2526,14 @@ interface BlockDragState {
   blockId: string;
   dropIndex: number | null;
   label: string;
+  mediaDrop: {
+    side: "left" | "right";
+    targetId: string;
+  } | null;
+  wrapDrop: {
+    side: "left" | "right";
+    targetId: string;
+  } | null;
   overTrash: boolean;
   pointerId: number;
   preview: string;
@@ -1404,10 +2551,12 @@ function getBlockLabel(block: Block): string {
     h1: "Encabezado 1",
     h2: "Encabezado 2",
     h3: "Encabezado 3",
+    image: "Imagen",
     p: "Texto",
     quote: "Cita",
     table: "Tabla",
-    todo: "Tarea"
+    todo: "Tarea",
+    video: "Video"
   };
   return labels[block.type];
 }
@@ -1419,6 +2568,10 @@ function getBlockPreview(block: Block): string {
     const columns = block.rows?.[0]?.length ?? TABLE_MIN_COLUMNS;
     return `${rows} × ${columns}`;
   }
+  if (block.type === "image") return block.alt || "Imagen";
+  if (block.type === "video") {
+    return normalizeVideoSource(block.source ?? "")?.provider ?? "Video";
+  }
   return block.text.trim().slice(0, 64) || "Bloque vacío";
 }
 
@@ -1427,12 +2580,22 @@ function BlockFrame({
   children,
   dropPosition,
   dragging,
+  grouped,
+  mediaDropSide,
+  wrapDropSide,
+  mediaInserterPosition,
+  onActivateInserter,
   onDragStart
 }: {
   block: Block;
   children: ReactNode;
   dropPosition: "after" | "before" | null;
   dragging: boolean;
+  grouped: boolean;
+  mediaDropSide: "left" | "right" | null;
+  wrapDropSide: "left" | "right" | null;
+  mediaInserterPosition: MediaInserterPosition | null;
+  onActivateInserter: (rect: DOMRect) => void;
   onDragStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
 }) {
   const isEmptyParagraph = block.type === "p" && !block.text.trim();
@@ -1445,8 +2608,34 @@ function BlockFrame({
         dragging ? "is-dragging" : ""
       } ${dropPosition ? `is-drop-${dropPosition}` : ""} ${
         isEmptyParagraph ? "is-empty-paragraph" : ""
-      } ${isHeading ? "is-heading" : ""}`}
+      } ${isHeading ? "is-heading" : ""} ${
+        grouped ? "is-grouped-media" : ""
+      } ${mediaDropSide ? `is-media-drop-${mediaDropSide}` : ""} ${
+        wrapDropSide ? `is-wrap-drop-${wrapDropSide}` : ""
+      }`}
+      aria-label={
+        mediaInserterPosition
+          ? mediaInserterPosition === "before"
+            ? "Escribir antes del bloque"
+            : mediaInserterPosition === "after"
+              ? "Escribir después del bloque"
+              : "Escribir entre los bloques"
+          : undefined
+      }
+      data-media-inserter={mediaInserterPosition ? "true" : undefined}
+      data-media-inserter-position={mediaInserterPosition ?? undefined}
       data-editor-block-id={block.id}
+      onClick={(event) => {
+        if (!mediaInserterPosition) return;
+        onActivateInserter(event.currentTarget.getBoundingClientRect());
+      }}
+      style={
+        grouped
+          ? {
+              flexBasis: `${block.width ?? 100}%`
+            }
+          : undefined
+      }
     >
       <button
         aria-label={`Arrastrar bloque: ${getBlockLabel(block)}`}
@@ -1501,21 +2690,28 @@ function BlockDragOverlay({
 
 function InlineFormattingToolbar({
   activeFormats,
+  alignment,
   anchor,
   onFormat,
   toolbarRef
 }: {
   activeFormats: InlineFormat[];
+  alignment: TextAlignment;
   anchor: { bottom: number; left: number; top: number; width: number };
   onFormat: (
-    format: InlineFormat | "clear" | "highlight" | "remove-highlight",
+    format:
+      | InlineFormat
+      | "alignment"
+      | "clear"
+      | "highlight"
+      | "remove-highlight",
     value?: string
   ) => void;
   toolbarRef: { current: HTMLDivElement | null };
 }) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkValue, setLinkValue] = useState("https://");
-  const placeBelow = anchor.top < 96;
+  const placeBelow = anchor.top < 156;
   const center = anchor.left + anchor.width / 2;
   const left = clamp(center, 178, window.innerWidth - 178);
 
@@ -1630,6 +2826,32 @@ function InlineFormattingToolbar({
           type="button"
         />
       </div>
+      <div
+        aria-label="Alinear texto"
+        className="inline-format-toolbar__alignment"
+        role="group"
+      >
+        {(
+          [
+            ["left", "Alinear texto a la izquierda", <AlignLeft key="left" />],
+            ["center", "Centrar texto", <AlignCenter key="center" />],
+            ["right", "Alinear texto a la derecha", <AlignRight key="right" />],
+            ["justify", "Justificar texto", <TextAlignJustify key="justify" />]
+          ] as const
+        ).map(([value, label, icon]) => (
+          <button
+            aria-label={label}
+            aria-pressed={alignment === value}
+            className="inline-format-toolbar__button"
+            key={value}
+            onClick={() => onFormat("alignment", value)}
+            title={label}
+            type="button"
+          >
+            {icon}
+          </button>
+        ))}
+      </div>
 
       <AnimatePresence initial={false}>
         {linkOpen ? (
@@ -1658,6 +2880,8 @@ function InlineFormattingToolbar({
 function BlockView({
   block,
   focusRequest,
+  grouped,
+  loadImage,
   onChangeType,
   onCloseSlash,
   onFocusNext,
@@ -1669,10 +2893,16 @@ function BlockView({
   onRemove,
   onRemoveEmpty,
   onUpdate,
-  slashOpen
+  slashOpen,
+  wrapped
 }: {
   block: Block;
   focusRequest: { id: string } | null;
+  grouped: boolean;
+  wrapped: boolean;
+  loadImage:
+    | ((source: string) => Promise<{ bytes: Uint8Array; mimeType: string }>)
+    | undefined;
   onUpdate: (patch: Partial<Block>) => void;
   onInsertAfter: (type?: BlockType) => void;
   onInsertDivider: () => void;
@@ -1726,6 +2956,22 @@ function BlockView({
         onFocusNext={onFocusNext}
         onFocusPrev={onFocusPrev}
         onUpdate={onUpdate}
+      />
+    );
+  }
+
+  if (block.type === "image" || block.type === "video") {
+    return (
+      <MediaBlock
+        block={block}
+        focusRequest={focusRequest}
+        grouped={grouped}
+        loadImage={loadImage}
+        onFocusNext={onFocusNext}
+        onFocusPrev={onFocusPrev}
+        onRemove={onRemove}
+        onUpdate={onUpdate}
+        wrapped={wrapped}
       />
     );
   }
@@ -1846,6 +3092,8 @@ function BlockView({
                 onInsertDivider();
               } else if (nextType === "table") {
                 onInsertTable();
+              } else if (nextType === "code") {
+                onChangeType("code");
               } else {
                 onUpdate({ text: "", type: nextType });
               }
@@ -1898,6 +3146,8 @@ function BlockView({
     todo: "",
     code: "font-mono",
     divider: "",
+    image: "",
+    video: "",
     table: ""
   };
 
@@ -1908,6 +3158,7 @@ function BlockView({
       data-inline-editor-id={block.id}
       data-block-type={block.type}
       data-placeholder={placeholder}
+      data-text-alignment={normalizeTextAlignment(block.textAlignment)}
       onBlur={() => {
         const element = ref.current;
         if (!element) return;
@@ -1918,6 +3169,7 @@ function BlockView({
       onInput={handleInput}
       onKeyDown={handleKeyDown}
       ref={ref}
+      style={{ textAlign: normalizeTextAlignment(block.textAlignment) }}
       suppressContentEditableWarning
     />
   );
@@ -1988,6 +3240,518 @@ function BlockView({
       transition={{ duration: 0.18 }}
     >
       {editable}
+    </motion.div>
+  );
+}
+
+function MediaBlock({
+  block,
+  focusRequest,
+  grouped,
+  loadImage,
+  onFocusNext,
+  onFocusPrev,
+  onRemove,
+  onUpdate,
+  wrapped
+}: {
+  block: Block;
+  focusRequest: { id: string } | null;
+  grouped: boolean;
+  loadImage:
+    | ((source: string) => Promise<{ bytes: Uint8Array; mimeType: string }>)
+    | undefined;
+  onFocusNext: () => void;
+  onFocusPrev: () => void;
+  onRemove: () => void;
+  onUpdate: (patch: Partial<Block>) => void;
+  wrapped: boolean;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const resizeRef = useRef<{
+    containerWidth: number;
+    edge: "left" | "right";
+    frameId: number;
+    latestWidth: number;
+    pointerId: number;
+    startPointerX: number;
+    startWidth: number;
+  } | null>(null);
+  const handleRef = useRef<HTMLButtonElement | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageError, setImageError] = useState(false);
+  const [resizing, setResizing] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState<{
+    right: number;
+    top: number;
+  } | null>(null);
+  const width = normalizeMediaWidth(block.width ?? 100);
+  const alignment = normalizeMediaAlignment(block.alignment);
+  const mediaWrap = normalizeMediaWrap(block.mediaWrap);
+  const video =
+    block.type === "video" ? normalizeVideoSource(block.source ?? "") : null;
+
+  useEffect(() => {
+    if (focusRequest) ref.current?.focus();
+  }, [focusRequest]);
+
+  useEffect(() => {
+    if (block.type !== "image" || !block.source) return;
+    if (/^https:\/\//i.test(block.source)) {
+      setImageUrl(block.source);
+      setImageError(false);
+      return;
+    }
+    if (!loadImage) {
+      setImageError(true);
+      return;
+    }
+
+    let active = true;
+    let objectUrl: string | null = null;
+    void loadImage(block.source)
+      .then((asset) => {
+        if (!active) return;
+        objectUrl = URL.createObjectURL(
+          new Blob([new Uint8Array(asset.bytes).buffer], {
+            type: asset.mimeType
+          })
+        );
+        setImageUrl(objectUrl);
+        setImageError(false);
+      })
+      .catch(() => {
+        if (active) setImageError(true);
+      });
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [block.source, block.type, loadImage]);
+
+  const menuOpen = menuAnchor !== null;
+  const toggleMenu = useCallback(() => {
+    setMenuAnchor((current) => {
+      if (current) return null;
+      const rect = handleRef.current?.getBoundingClientRect();
+      if (!rect) return null;
+      return {
+        right: Math.max(8, window.innerWidth - rect.right),
+        top: rect.bottom + 6
+      };
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const closeOnOutside = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        (target.closest("[data-media-menu]") ||
+          target.closest("[data-media-handle]"))
+      ) {
+        return;
+      }
+      setMenuAnchor(null);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuAnchor(null);
+    };
+    document.addEventListener("pointerdown", closeOnOutside, true);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutside, true);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [menuOpen]);
+
+  useEffect(() => {
+    if (!resizing) return;
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor =
+      resizeRef.current?.edge === "left" ? "nesw-resize" : "nwse-resize";
+    document.body.style.userSelect = "none";
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const resize = resizeRef.current;
+      if (!resize || resize.pointerId !== event.pointerId) return;
+      resize.latestWidth = resolveMediaDragWidth({
+        alignment,
+        containerWidth: resize.containerWidth,
+        edge: resize.edge,
+        pointerX: event.clientX,
+        startPointerX: resize.startPointerX,
+        startWidth: resize.startWidth
+      });
+      cancelAnimationFrame(resize.frameId);
+      resize.frameId = requestAnimationFrame(() => {
+        if (wrapped) {
+          const unit = ref.current?.closest<HTMLElement>(".editor-unit");
+          if (unit) unit.style.width = `${resize.latestWidth}%`;
+        } else if (grouped) {
+          const frame = ref.current?.closest<HTMLElement>(".editor-block");
+          if (frame) frame.style.flexBasis = `${resize.latestWidth}%`;
+        } else if (ref.current) {
+          ref.current.style.width = `${resize.latestWidth}%`;
+        }
+      });
+    };
+    const commitResize = (pointerId?: number) => {
+      const resize = resizeRef.current;
+      if (
+        !resize ||
+        (pointerId !== undefined && resize.pointerId !== pointerId)
+      )
+        return;
+      cancelAnimationFrame(resize.frameId);
+      const committedWidth = Math.round(resize.latestWidth);
+      if (wrapped) {
+        const unit = ref.current?.closest<HTMLElement>(".editor-unit");
+        if (unit) unit.style.width = `${committedWidth}%`;
+      } else if (grouped) {
+        const frame = ref.current?.closest<HTMLElement>(".editor-block");
+        if (frame) frame.style.flexBasis = `${committedWidth}%`;
+      } else if (ref.current) {
+        ref.current.style.width = `${committedWidth}%`;
+      }
+      resizeRef.current = null;
+      setResizing(false);
+      onUpdate({ width: committedWidth });
+    };
+    const finishResize = (event: PointerEvent) => commitResize(event.pointerId);
+    const finishOnBlur = () => commitResize();
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", finishResize);
+    window.addEventListener("pointercancel", finishResize);
+    window.addEventListener("blur", finishOnBlur);
+    return () => {
+      const resize = resizeRef.current;
+      if (resize) cancelAnimationFrame(resize.frameId);
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", finishResize);
+      window.removeEventListener("pointercancel", finishResize);
+      window.removeEventListener("blur", finishOnBlur);
+    };
+  }, [alignment, grouped, onUpdate, resizing, wrapped]);
+
+  const mediaLabel = block.type === "image" ? "imagen" : "video";
+
+  return (
+    <motion.div
+      animate={{ opacity: 1, y: 0 }}
+      className={`media-block is-${alignment} ${resizing ? "is-resizing" : ""}`}
+      data-media-block-id={block.id}
+      data-block-type={block.type}
+      initial={{ opacity: 0, y: 4 }}
+      onKeyDown={(event) => {
+        if (event.key === "Backspace" || event.key === "Delete") {
+          event.preventDefault();
+          onRemove();
+        } else if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+          event.preventDefault();
+          onFocusPrev();
+        } else if (
+          event.key === "ArrowDown" ||
+          event.key === "ArrowRight" ||
+          event.key === "Enter"
+        ) {
+          event.preventDefault();
+          onFocusNext();
+        }
+      }}
+      ref={ref}
+      style={{ width: grouped || wrapped ? "100%" : `${width}%` }}
+      tabIndex={0}
+      transition={{ duration: 0.2 }}
+    >
+      {grouped ? null : (
+        <>
+          <button
+            aria-expanded={menuOpen}
+            aria-haspopup="menu"
+            aria-label={`Opciones de ${mediaLabel}`}
+            className={`media-block__handle ${menuOpen ? "is-open" : ""}`}
+            data-media-handle
+            onClick={toggleMenu}
+            ref={handleRef}
+            title="Acomodar"
+            type="button"
+          >
+            <SlidersHorizontal size={14} />
+          </button>
+          {menuOpen && menuAnchor && typeof document !== "undefined"
+            ? createPortal(
+                <div
+                  className="media-block__menu"
+                  data-media-menu
+                  role="menu"
+                  style={{
+                    position: "fixed",
+                    right: menuAnchor.right,
+                    top: menuAnchor.top
+                  }}
+                >
+                  <div
+                    aria-label={`Ajuste de texto para ${mediaLabel}`}
+                    className="media-block__menu-group"
+                    role="group"
+                  >
+                    <span className="media-block__menu-label">
+                      Ajuste de texto
+                    </span>
+                    <div className="media-block__menu-row">
+                      {(
+                        [
+                          [
+                            "none",
+                            "Sin ajuste",
+                            <Rows3 key="none" size={15} />
+                          ],
+                          [
+                            "left",
+                            `Texto a la derecha de la ${mediaLabel}`,
+                            <AlignLeft key="left" size={15} />
+                          ],
+                          [
+                            "right",
+                            `Texto a la izquierda de la ${mediaLabel}`,
+                            <AlignRight key="right" size={15} />
+                          ]
+                        ] as const
+                      ).map(([value, label, icon]) => (
+                        <button
+                          aria-label={label}
+                          aria-pressed={mediaWrap === value}
+                          key={value}
+                          onClick={() =>
+                            onUpdate({
+                              alignment: value === "none" ? alignment : value,
+                              mediaWrap: value
+                            })
+                          }
+                          title={label}
+                          type="button"
+                        >
+                          {icon}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {mediaWrap === "none" ? (
+                    <div
+                      aria-label={`Alinear ${mediaLabel}`}
+                      className="media-block__menu-group"
+                      role="group"
+                    >
+                      <span className="media-block__menu-label">
+                        Alineación
+                      </span>
+                      <div className="media-block__menu-row">
+                        {(
+                          [
+                            [
+                              "left",
+                              "Izquierda",
+                              <AlignLeft key="left" size={15} />
+                            ],
+                            [
+                              "center",
+                              "Centro",
+                              <AlignCenter key="center" size={15} />
+                            ],
+                            [
+                              "right",
+                              "Derecha",
+                              <AlignRight key="right" size={15} />
+                            ]
+                          ] as const
+                        ).map(([value, label, icon]) => (
+                          <button
+                            aria-label={`Alinear ${mediaLabel} ${
+                              value === "center"
+                                ? "al centro"
+                                : `a la ${label.toLowerCase()}`
+                            }`}
+                            aria-pressed={alignment === value}
+                            key={value}
+                            onClick={() => onUpdate({ alignment: value })}
+                            title={label}
+                            type="button"
+                          >
+                            {icon}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  <div
+                    aria-label={`Tamaño de la ${mediaLabel}`}
+                    className="media-block__menu-group"
+                    role="group"
+                  >
+                    <span className="media-block__menu-label">Tamaño</span>
+                    <div className="media-block__menu-row">
+                      {([25, 50, 75, 100] as const).map((preset) => (
+                        <button
+                          aria-label={`${preset}%`}
+                          aria-pressed={width === preset}
+                          className="media-block__menu-size"
+                          key={preset}
+                          onClick={() => onUpdate({ width: preset })}
+                          type="button"
+                        >
+                          {preset}%
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>,
+                document.body
+              )
+            : null}
+        </>
+      )}
+      <div className="media-block__surface">
+        {block.type === "image" ? (
+          imageUrl && !imageError ? (
+            <img alt={block.alt ?? ""} draggable={false} src={imageUrl} />
+          ) : (
+            <div className="media-block__fallback">
+              <ImageIcon aria-hidden="true" size={24} />
+              <span>No se pudo cargar la imagen</span>
+            </div>
+          )
+        ) : video?.kind === "direct" ? (
+          <video controls preload="metadata" src={video.embedUrl} />
+        ) : video ? (
+          <iframe
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            loading="lazy"
+            referrerPolicy="strict-origin-when-cross-origin"
+            src={video.embedUrl}
+            title={`${video.provider}: ${block.alt ?? "Video"}`}
+          />
+        ) : (
+          <div className="media-block__fallback">
+            <Video aria-hidden="true" size={24} />
+            <span>Enlace de video no compatible</span>
+          </div>
+        )}
+        {(alignment === "left"
+          ? (["right"] as const)
+          : alignment === "right"
+            ? (["left"] as const)
+            : (["left", "right"] as const)
+        ).map((edge) => (
+          <button
+            aria-label={`Redimensionar ${mediaLabel} desde la esquina ${edge === "left" ? "izquierda" : "derecha"}`}
+            className={`media-block__resize-corner is-${edge}`}
+            key={edge}
+            onPointerDown={(event) => {
+              if (event.button !== 0) return;
+              event.preventDefault();
+              event.stopPropagation();
+              const containerWidth =
+                (wrapped
+                  ? ref.current
+                      ?.closest<HTMLElement>(".block-editor-root")
+                      ?.getBoundingClientRect().width
+                  : grouped
+                    ? ref.current
+                        ?.closest<HTMLElement>(".media-row")
+                        ?.getBoundingClientRect().width
+                    : ref.current?.parentElement?.getBoundingClientRect()
+                        .width) ?? 0;
+              resizeRef.current = {
+                containerWidth,
+                edge,
+                frameId: 0,
+                latestWidth: width,
+                pointerId: event.pointerId,
+                startPointerX: event.clientX,
+                startWidth: width
+              };
+              setResizing(true);
+            }}
+            title="Arrastra para cambiar el tamaño"
+            type="button"
+          />
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
+function VideoDialog({
+  onClose,
+  onSubmit
+}: {
+  onClose: () => void;
+  onSubmit: (source: string) => void;
+}) {
+  const [source, setSource] = useState("");
+  const [invalid, setInvalid] = useState(false);
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!normalizeVideoSource(source)) {
+      setInvalid(true);
+      return;
+    }
+    onSubmit(source.trim());
+  };
+
+  return (
+    <motion.div
+      animate={{ opacity: 1 }}
+      className="media-dialog-backdrop"
+      exit={{ opacity: 0 }}
+      initial={{ opacity: 0 }}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <motion.form
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="media-dialog"
+        initial={{ opacity: 0, scale: 0.98, y: 8 }}
+        onSubmit={submit}
+      >
+        <div className="media-dialog__icon">
+          <Video aria-hidden="true" size={20} />
+        </div>
+        <div>
+          <h2>Insertar video</h2>
+          <p>YouTube, Vimeo, Loom, Dailymotion o un archivo HTTPS directo.</p>
+        </div>
+        <input
+          aria-label="Enlace del video"
+          autoFocus
+          onChange={(event) => {
+            setSource(event.target.value);
+            setInvalid(false);
+          }}
+          placeholder="https://youtube.com/watch?v=..."
+          value={source}
+        />
+        {invalid ? (
+          <span className="media-dialog__error">
+            Usa un enlace HTTPS de un proveedor compatible.
+          </span>
+        ) : null}
+        <div className="media-dialog__actions">
+          <button onClick={onClose} type="button">
+            Cancelar
+          </button>
+          <button type="submit">Insertar</button>
+        </div>
+      </motion.form>
     </motion.div>
   );
 }
@@ -2510,6 +4274,7 @@ function SlashMenu({
     <motion.div
       animate={{ opacity: 1, scale: 1, y: 0 }}
       className="glass-strong w-[218px] rounded-[var(--radius-lg)] p-1.5"
+      data-slash-menu
       exit={{ opacity: 0, scale: 0.98, y: -4 }}
       initial={{ opacity: 0, scale: 0.98, y: -4 }}
       ref={menuRef}

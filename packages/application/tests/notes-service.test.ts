@@ -109,4 +109,107 @@ describe("notes service", () => {
       "outside the Notebook Root"
     );
   });
+
+  it("imports note images into hidden notebook assets and loads their bytes", async () => {
+    const filesystem = createStubFilesystem([]);
+    await filesystem.createDirectory("/Notes/Ideas");
+    await filesystem.writeFile("/Notes/Ideas/Canvas.md", "# Canvas");
+    await filesystem.writeBytes(
+      "/Downloads/diagram.png",
+      new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
+    );
+    const service = new NotesService(filesystem, createInMemoryPersistence());
+    await service.attach("/Notes");
+
+    await expect(
+      service.importImage("/Notes/Ideas/Canvas.md", "/Downloads/diagram.png")
+    ).resolves.toEqual({
+      alt: "diagram",
+      source: "../.gravity-assets/diagram.png"
+    });
+    await expect(
+      service.loadImage(
+        "/Notes/Ideas/Canvas.md",
+        "../.gravity-assets/diagram.png"
+      )
+    ).resolves.toEqual({
+      bytes: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+      mimeType: "image/png"
+    });
+  });
+
+  it("imports animated GIFs as regular note images", async () => {
+    const filesystem = createStubFilesystem([]);
+    await filesystem.createDirectory("/Notes/Ideas");
+    await filesystem.writeFile("/Notes/Ideas/Canvas.md", "# Canvas");
+    const gifBytes = new Uint8Array([
+      71, 73, 70, 56, 57, 97, 1, 0, 1, 0, 128, 0, 0
+    ]);
+    await filesystem.writeBytes("/Downloads/animation.gif", gifBytes);
+    const service = new NotesService(filesystem, createInMemoryPersistence());
+    await service.attach("/Notes");
+
+    await expect(
+      service.importImage("/Notes/Ideas/Canvas.md", "/Downloads/animation.gif")
+    ).resolves.toEqual({
+      alt: "animation",
+      source: "../.gravity-assets/animation.gif"
+    });
+    await expect(
+      service.loadImage(
+        "/Notes/Ideas/Canvas.md",
+        "../.gravity-assets/animation.gif"
+      )
+    ).resolves.toEqual({
+      bytes: gifBytes,
+      mimeType: "image/gif"
+    });
+  });
+
+  it("stores pasted image bytes with the same managed asset behavior", async () => {
+    const filesystem = createStubFilesystem([]);
+    await filesystem.createDirectory("/Notes");
+    await filesystem.writeFile("/Notes/Canvas.md", "# Canvas");
+    const service = new NotesService(filesystem, createInMemoryPersistence());
+    await service.attach("/Notes");
+    const gifBytes = new Uint8Array([
+      71, 73, 70, 56, 57, 97, 1, 0, 1, 0, 128, 0, 0
+    ]);
+
+    await expect(
+      service.importImageBytes("/Notes/Canvas.md", {
+        bytes: gifBytes,
+        fileName: "reacción-sin-extension",
+        mimeType: "image/gif; charset=binary"
+      })
+    ).resolves.toEqual({
+      alt: "reaccion-sin-extension",
+      source: ".gravity-assets/reaccion-sin-extension.gif"
+    });
+    await expect(
+      service.loadImage(
+        "/Notes/Canvas.md",
+        ".gravity-assets/reaccion-sin-extension.gif"
+      )
+    ).resolves.toEqual({
+      bytes: gifBytes,
+      mimeType: "image/gif"
+    });
+  });
+
+  it("does not load note images from outside the notebook root", async () => {
+    const filesystem = createStubFilesystem([]);
+    await filesystem.createDirectory("/Notes");
+    await filesystem.writeFile("/Notes/Canvas.md", "# Canvas");
+    await filesystem.writeBytes(
+      "/outside.png",
+      new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
+    );
+    const service = new NotesService(filesystem, createInMemoryPersistence());
+    await service.attach("/Notes");
+
+    await expect(
+      service.loadImage("/Notes/Canvas.md", "../outside.png")
+    ).rejects.toThrow("outside the Notebook Root");
+  });
 });

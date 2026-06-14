@@ -25,6 +25,7 @@ import {
   type AppWorkspaceHydrateInput,
   type AppWorkspaceState,
   type NotesNavigationState,
+  type NoteImageImport,
   type ProjectOverview,
   type ProjectState,
   type RunPanelState
@@ -51,6 +52,8 @@ function createSequentialIdGenerator() {
     }
   };
 }
+
+const MAX_NOTE_IMAGE_DOWNLOAD_BYTES = 20 * 1024 * 1024;
 
 const ids = createSequentialIdGenerator();
 const clock = {
@@ -278,6 +281,68 @@ export function registerAppIpc(): void {
     "notes:save-content",
     async (_, notePath: string, content: string) =>
       notes.saveNote(notePath, content)
+  );
+  ipcMain.handle("notes:choose-image", async (_, notePath: string) => {
+    const result = await dialog.showOpenDialog({
+      buttonLabel: "Insertar imagen",
+      filters: [
+        {
+          extensions: ["png", "jpg", "jpeg", "gif", "webp"],
+          name: "Imágenes"
+        }
+      ],
+      properties: ["openFile"],
+      title: "Elige una imagen"
+    });
+    const sourcePath = result.filePaths[0];
+    return result.canceled || !sourcePath
+      ? null
+      : notes.importImage(notePath, sourcePath);
+  });
+  ipcMain.handle(
+    "notes:load-image",
+    async (_, notePath: string, source: string) =>
+      notes.loadImage(notePath, source)
+  );
+  ipcMain.handle(
+    "notes:save-image",
+    async (_, notePath: string, input: NoteImageImport) =>
+      notes.importImageBytes(notePath, input)
+  );
+  ipcMain.handle(
+    "notes:import-image-url",
+    async (_, notePath: string, source: string) => {
+      const url = new URL(source);
+      if (url.protocol !== "https:") {
+        throw new Error("Pasted note images must use HTTPS.");
+      }
+      const response = await fetch(url, {
+        redirect: "follow",
+        signal: AbortSignal.timeout(15_000)
+      });
+      if (!response.ok || !response.url.startsWith("https://")) {
+        throw new Error("The pasted image could not be downloaded securely.");
+      }
+      const declaredLength = Number(
+        response.headers.get("content-length") ?? 0
+      );
+      if (declaredLength > MAX_NOTE_IMAGE_DOWNLOAD_BYTES) {
+        throw new Error("Note images must be between 1 byte and 20 MB.");
+      }
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (bytes.byteLength > MAX_NOTE_IMAGE_DOWNLOAD_BYTES) {
+        throw new Error("Note images must be between 1 byte and 20 MB.");
+      }
+      const responseUrl = new URL(response.url);
+      const fileName =
+        decodeURIComponent(responseUrl.pathname.split("/").at(-1) ?? "") ||
+        "imagen";
+      return notes.importImageBytes(notePath, {
+        bytes,
+        fileName,
+        mimeType: response.headers.get("content-type") ?? ""
+      });
+    }
   );
   ipcMain.handle("notes:create-note", async (_, parentPath?: string) =>
     notes.createNote(parentPath)

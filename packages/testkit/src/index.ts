@@ -25,6 +25,7 @@ import type {
 export function createStubFilesystem(files: string[]): FilesystemPort {
   const normalize = (value: string) => value.replaceAll("\\", "/");
   const fileMap = new Map(files.map((file) => [normalize(file), ""]));
+  const byteMap = new Map<string, Uint8Array>();
   const directorySet = new Set(
     files.flatMap((file) => {
       const normalized = normalize(file);
@@ -46,11 +47,15 @@ export function createStubFilesystem(files: string[]): FilesystemPort {
     async deletePath(path, options) {
       const normalized = normalize(path);
       fileMap.delete(normalized);
+      byteMap.delete(normalized);
       directorySet.delete(normalized);
 
       if (options?.recursive) {
         for (const file of fileMap.keys()) {
-          if (file.startsWith(`${normalized}/`)) fileMap.delete(file);
+          if (file.startsWith(`${normalized}/`)) {
+            fileMap.delete(file);
+            byteMap.delete(file);
+          }
         }
         for (const directory of directorySet) {
           if (directory.startsWith(`${normalized}/`)) {
@@ -118,14 +123,27 @@ export function createStubFilesystem(files: string[]): FilesystemPort {
 
       return content;
     },
+    async readBytes(path) {
+      const normalized = normalize(path);
+      const bytes = byteMap.get(normalized);
+      if (bytes) return new Uint8Array(bytes);
+      const content = fileMap.get(normalized);
+      if (content === undefined) {
+        throw new Error(`Missing file: ${path}`);
+      }
+      return new TextEncoder().encode(content);
+    },
     async movePath(sourcePath, destinationPath) {
       const source = normalize(sourcePath);
       const destination = normalize(destinationPath);
 
       if (fileMap.has(source)) {
         const content = fileMap.get(source) ?? "";
+        const bytes = byteMap.get(source);
         fileMap.delete(source);
+        byteMap.delete(source);
         fileMap.set(destination, content);
+        if (bytes) byteMap.set(destination, bytes);
         return;
       }
 
@@ -179,6 +197,15 @@ export function createStubFilesystem(files: string[]): FilesystemPort {
     async writeFile(path, content) {
       const normalized = normalize(path);
       fileMap.set(normalized, content);
+      const parts = normalized.split("/");
+      for (let index = 1; index < parts.length - 1; index += 1) {
+        directorySet.add(parts.slice(0, index + 1).join("/"));
+      }
+    },
+    async writeBytes(path, content) {
+      const normalized = normalize(path);
+      fileMap.set(normalized, "");
+      byteMap.set(normalized, new Uint8Array(content));
       const parts = normalized.split("/");
       for (let index = 1; index < parts.length - 1; index += 1) {
         directorySet.add(parts.slice(0, index + 1).join("/"));

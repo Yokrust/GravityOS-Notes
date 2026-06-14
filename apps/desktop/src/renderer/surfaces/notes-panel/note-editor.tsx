@@ -147,7 +147,21 @@ export function NoteEditor() {
             <div className="editor note-editor-content">
               <BlockEditor
                 key={activeNote.id}
+                loadImage={(source) =>
+                  window.gravity.loadNotebookImage(activeNote.path, source)
+                }
                 onChange={setContent}
+                onChooseImage={() =>
+                  window.gravity.chooseNotebookImage(activeNote.path)
+                }
+                onPasteImage={(input) =>
+                  input.kind === "url"
+                    ? window.gravity.importNotebookImageUrl(
+                        activeNote.path,
+                        input.source
+                      )
+                    : window.gravity.saveNotebookImage(activeNote.path, input)
+                }
                 value={content}
               />
             </div>

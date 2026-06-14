@@ -71,10 +71,12 @@ export interface FilesystemPort {
   listDirectory(path: string): Promise<DirectoryEntry[]>;
   inspectPath(path: string): Promise<PathDetails>;
   movePath(sourcePath: string, destinationPath: string): Promise<void>;
+  readBytes(path: string): Promise<Uint8Array>;
   readFile(path: string): Promise<string>;
   relativePath(fromPath: string, toPath: string): string;
   resolvePath(path: string, ...segments: string[]): string;
   createDirectory(path: string): Promise<void>;
+  writeBytes(path: string, content: Uint8Array): Promise<void>;
   writeFile(path: string, content: string): Promise<void>;
 }
 
@@ -189,6 +191,22 @@ export interface NoteDocument {
   name: string;
   path: string;
   updatedAt: number;
+}
+
+export interface ImportedNoteImage {
+  alt: string;
+  source: string;
+}
+
+export interface NoteImageImport {
+  bytes: Uint8Array;
+  fileName: string;
+  mimeType: string;
+}
+
+export interface NoteImageAsset {
+  bytes: Uint8Array;
+  mimeType: string;
 }
 
 export interface NotesState extends PersistedNotesState {

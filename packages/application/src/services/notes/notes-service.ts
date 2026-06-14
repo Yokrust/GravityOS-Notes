@@ -1,6 +1,9 @@
 import type {
   FilesystemPort,
+  ImportedNoteImage,
   NoteDocument,
+  NoteImageAsset,
+  NoteImageImport,
   NotesNavigationState,
   NotesState,
   NoteTreeNode,
@@ -10,6 +13,21 @@ import type {
 } from "../../contracts/index.js";
 
 const MARKDOWN_EXTENSION = ".md";
+const NOTE_ASSET_DIRECTORY = ".gravity-assets";
+const NOTE_IMAGE_TYPES: Record<string, string> = {
+  ".gif": "image/gif",
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp"
+};
+const NOTE_IMAGE_EXTENSIONS: Record<string, string> = {
+  "image/gif": ".gif",
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp"
+};
+const MAX_NOTE_IMAGE_BYTES = 20 * 1024 * 1024;
 
 export class NotesService {
   constructor(
@@ -84,6 +102,113 @@ export class NotesService {
       path: notePath,
       updatedAt: details.modifiedAt ?? Date.now()
     };
+  }
+
+  async importImage(
+    notePath: string,
+    sourcePath: string
+  ): Promise<ImportedNoteImage> {
+    const preferences = await this.loadPreferences();
+    const notebookRoot = requireNotebookRoot(preferences);
+    await this.assertMarkdownFile(notebookRoot, notePath);
+    const sourceDetails = await this.filesystem.inspectPath(sourcePath);
+    if (sourceDetails.status !== "ready" || sourceDetails.kind !== "file") {
+      throw new Error("The selected image is not readable.");
+    }
+
+    const extension = fileExtension(this.filesystem.baseName(sourcePath));
+    const mimeType = NOTE_IMAGE_TYPES[extension];
+    if (!mimeType) {
+      throw new Error("Unsupported note image type.");
+    }
+    const bytes = await this.filesystem.readBytes(sourcePath);
+    return this.saveImageAsset(notebookRoot, notePath, {
+      bytes,
+      fileName: this.filesystem.baseName(sourcePath),
+      mimeType
+    });
+  }
+
+  async importImageBytes(
+    notePath: string,
+    input: NoteImageImport
+  ): Promise<ImportedNoteImage> {
+    const preferences = await this.loadPreferences();
+    const notebookRoot = requireNotebookRoot(preferences);
+    await this.assertMarkdownFile(notebookRoot, notePath);
+    return this.saveImageAsset(notebookRoot, notePath, input);
+  }
+
+  private async saveImageAsset(
+    notebookRoot: string,
+    notePath: string,
+    input: NoteImageImport
+  ): Promise<ImportedNoteImage> {
+    const mimeType = input.mimeType.split(";")[0]?.trim().toLowerCase() ?? "";
+    const extension = NOTE_IMAGE_EXTENSIONS[mimeType];
+    if (!extension) throw new Error("Unsupported note image type.");
+    if (
+      !input.bytes.byteLength ||
+      input.bytes.byteLength > MAX_NOTE_IMAGE_BYTES
+    ) {
+      throw new Error("Note images must be between 1 byte and 20 MB.");
+    }
+    if (!matchesImageType(input.bytes, mimeType)) {
+      throw new Error("The selected image contents do not match its type.");
+    }
+
+    const assetDirectory = this.filesystem.resolvePath(
+      notebookRoot,
+      NOTE_ASSET_DIRECTORY
+    );
+    await this.filesystem.createDirectory(assetDirectory);
+    const sourceName = this.filesystem.baseName(input.fileName);
+    const sourceExtension = fileExtension(sourceName);
+    const baseName = sanitizeAssetName(
+      sourceName.slice(
+        0,
+        Math.max(0, sourceName.length - sourceExtension.length)
+      )
+    );
+    const destinationPath = await this.nextAvailablePath(
+      assetDirectory,
+      baseName || "imagen",
+      extension
+    );
+    await this.filesystem.writeBytes(destinationPath, input.bytes);
+
+    return {
+      alt: baseName || "Imagen",
+      source: encodeMarkdownPath(
+        this.filesystem.relativePath(
+          this.filesystem.directoryName(notePath),
+          destinationPath
+        )
+      )
+    };
+  }
+
+  async loadImage(notePath: string, source: string): Promise<NoteImageAsset> {
+    const preferences = await this.loadPreferences();
+    const notebookRoot = requireNotebookRoot(preferences);
+    await this.assertMarkdownFile(notebookRoot, notePath);
+    const imagePath = this.filesystem.resolvePath(
+      this.filesystem.directoryName(notePath),
+      decodeURIComponent(source)
+    );
+    this.assertManagedPath(notebookRoot, imagePath);
+    const mimeType =
+      NOTE_IMAGE_TYPES[fileExtension(this.filesystem.baseName(imagePath))];
+    if (!mimeType) throw new Error("Unsupported note image type.");
+
+    const bytes = await this.filesystem.readBytes(imagePath);
+    if (!bytes.byteLength || bytes.byteLength > MAX_NOTE_IMAGE_BYTES) {
+      throw new Error("Note images must be between 1 byte and 20 MB.");
+    }
+    if (!matchesImageType(bytes, mimeType)) {
+      throw new Error("The note image contents do not match its type.");
+    }
+    return { bytes, mimeType };
   }
 
   async createNote(parentPath?: string): Promise<NotesState> {
@@ -398,6 +523,48 @@ function requireNotebookRoot(state: PersistedNotesState): string {
 
 function noteName(fileName: string): string {
   return fileName.slice(0, -MARKDOWN_EXTENSION.length);
+}
+
+function fileExtension(fileName: string): string {
+  return fileName.toLowerCase().match(/(\.[a-z0-9]+)$/)?.[1] ?? "";
+}
+
+function sanitizeAssetName(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+function encodeMarkdownPath(value: string): string {
+  return value
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
+function matchesImageType(bytes: Uint8Array, mimeType: string): boolean {
+  if (mimeType === "image/png") {
+    return [0x89, 0x50, 0x4e, 0x47].every(
+      (value, index) => bytes[index] === value
+    );
+  }
+  if (mimeType === "image/jpeg") {
+    return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  }
+  if (mimeType === "image/gif") {
+    return new TextDecoder().decode(bytes.slice(0, 6)).startsWith("GIF8");
+  }
+  if (mimeType === "image/webp") {
+    const decoder = new TextDecoder();
+    return (
+      decoder.decode(bytes.slice(0, 4)) === "RIFF" &&
+      decoder.decode(bytes.slice(8, 12)) === "WEBP"
+    );
+  }
+  return false;
 }
 
 function normalizeNodeName(value: string): string {

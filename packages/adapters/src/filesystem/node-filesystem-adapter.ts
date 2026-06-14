@@ -108,6 +108,10 @@ export class NodeFilesystemAdapter implements FilesystemPort {
     return readFile(path, "utf8");
   }
 
+  async readBytes(path: string): Promise<Uint8Array> {
+    return readFile(path);
+  }
+
   async movePath(sourcePath: string, destinationPath: string): Promise<void> {
     await rename(sourcePath, destinationPath);
   }
@@ -126,6 +130,10 @@ export class NodeFilesystemAdapter implements FilesystemPort {
 
   async writeFile(path: string, content: string): Promise<void> {
     await writeFile(path, content, "utf8");
+  }
+
+  async writeBytes(path: string, content: Uint8Array): Promise<void> {
+    await writeFile(path, content);
   }
 }
 

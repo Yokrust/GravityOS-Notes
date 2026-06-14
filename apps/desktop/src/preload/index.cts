@@ -421,6 +421,29 @@ contextBridge.exposeInMainWorld("gravity", {
       path: string;
       updatedAt: number;
     }>,
+  chooseNotebookImage: async (notePath: string) =>
+    ipcRenderer.invoke("notes:choose-image", notePath) as Promise<{
+      alt: string;
+      source: string;
+    } | null>,
+  loadNotebookImage: async (notePath: string, source: string) =>
+    ipcRenderer.invoke("notes:load-image", notePath, source) as Promise<{
+      bytes: Uint8Array;
+      mimeType: string;
+    }>,
+  saveNotebookImage: async (
+    notePath: string,
+    input: { bytes: Uint8Array; fileName: string; mimeType: string }
+  ) =>
+    ipcRenderer.invoke("notes:save-image", notePath, input) as Promise<{
+      alt: string;
+      source: string;
+    }>,
+  importNotebookImageUrl: async (notePath: string, source: string) =>
+    ipcRenderer.invoke("notes:import-image-url", notePath, source) as Promise<{
+      alt: string;
+      source: string;
+    }>,
   createNotebookNote: async (parentPath?: string) =>
     ipcRenderer.invoke(
       "notes:create-note",

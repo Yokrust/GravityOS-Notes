@@ -28,6 +28,22 @@ interface Window {
       notePath: string,
       content: string
     ): Promise<NoteDocumentRecord>;
+    chooseNotebookImage(notePath: string): Promise<{
+      alt: string;
+      source: string;
+    } | null>;
+    loadNotebookImage(
+      notePath: string,
+      source: string
+    ): Promise<{ bytes: Uint8Array; mimeType: string }>;
+    saveNotebookImage(
+      notePath: string,
+      input: { bytes: Uint8Array; fileName: string; mimeType: string }
+    ): Promise<{ alt: string; source: string }>;
+    importNotebookImageUrl(
+      notePath: string,
+      source: string
+    ): Promise<{ alt: string; source: string }>;
     createNotebookNote(parentPath?: string): Promise<NotesStateRecord>;
     createNotebookFolder(parentPath?: string): Promise<NotesStateRecord>;
     renameNotebookNode(
