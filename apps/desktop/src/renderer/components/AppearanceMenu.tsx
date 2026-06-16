@@ -6,6 +6,7 @@ import { Pipette, SwatchBook } from "lucide-react";
 
 import { ACCENTS, THEMES, useAppearance } from "../lib/appearance.js";
 import { hslToRgb, rgbToHex, rgbToHsl } from "../lib/ambient.js";
+import { t } from "../lib/i18n.js";
 
 /** El selector nativo da/recibe hex; el acento conserva matiz, saturación y
  *  luminosidad para reproducir exactamente el color elegido. */
@@ -56,11 +57,11 @@ export function AppearanceMenu() {
     <div className="relative" ref={rootRef}>
       <button
         aria-expanded={open}
-        aria-label="Apariencia"
+        aria-label={t("Apariencia")}
         className="appearance-trigger"
         data-open={open}
         onClick={() => setOpen((value) => !value)}
-        title="Apariencia"
+        title={t("Apariencia")}
         type="button"
       >
         <SwatchBook size={14} strokeWidth={1.8} />
@@ -75,7 +76,7 @@ export function AppearanceMenu() {
             initial={{ opacity: 0, scale: 0.97, y: -6 }}
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
           >
-            <p className="appearance-kicker">Tema</p>
+            <p className="appearance-kicker">{t("Tema")}</p>
             <div className="appearance-themes" role="radiogroup">
               {THEMES.map((option, index) => (
                 <motion.button
@@ -98,17 +99,19 @@ export function AppearanceMenu() {
                   {/* data-theme en el swatch re-evalúa los tokens y dibuja la
                       mini-ventana con la paleta real de cada tema */}
                   <span className="appearance-swatch" data-theme={option.id} />
-                  <span className="appearance-theme-name">{option.label}</span>
+                  <span className="appearance-theme-name">
+                    {t(option.label)}
+                  </span>
                 </motion.button>
               ))}
             </div>
 
-            <p className="appearance-kicker">Acento</p>
+            <p className="appearance-kicker">{t("Acento")}</p>
             <div className="appearance-accents" role="radiogroup">
               {ACCENTS.map((option) => (
                 <button
                   aria-checked={accent === option.id}
-                  aria-label={option.label}
+                  aria-label={t(option.label)}
                   className={`appearance-accent ${
                     accent === option.id ? "is-selected" : ""
                   }`}
@@ -121,14 +124,14 @@ export function AppearanceMenu() {
                       "--swatch-s": option.s
                     } as React.CSSProperties
                   }
-                  title={option.label}
+                  title={t(option.label)}
                   type="button"
                 />
               ))}
 
               {/* Acento libre: el swatch envuelve un input de color nativo */}
               <label
-                aria-label="Acento personalizado"
+                aria-label={t("Acento personalizado")}
                 className={`appearance-accent appearance-accent-custom ${
                   accent === "custom" ? "is-selected" : ""
                 }`}
@@ -139,11 +142,11 @@ export function AppearanceMenu() {
                     "--swatch-l": `${customAccent.l}%`
                   } as React.CSSProperties
                 }
-                title="Acento personalizado"
+                title={t("Acento personalizado")}
               >
                 <Pipette size={11} strokeWidth={2} />
                 <input
-                  aria-label="Elegir color de acento"
+                  aria-label={t("Elegir color de acento")}
                   className="appearance-accent-input"
                   onChange={(event) =>
                     setCustomAccent(hexToCustomAccent(event.target.value))
@@ -159,8 +162,9 @@ export function AppearanceMenu() {
             </div>
 
             <p className="appearance-footnote">
-              Cristal y Cristal Noche recrean el vidrio líquido de Apple en día
-              y noche: superficies translúcidas sobre una malla de color viva.
+              {t(
+                "Cristal y Cristal Noche recrean el vidrio líquido de Apple en día y noche: superficies translúcidas sobre una malla de color viva."
+              )}
             </p>
           </motion.div>
         ) : null}

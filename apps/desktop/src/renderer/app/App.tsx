@@ -6,6 +6,7 @@ import { BrandLogo } from "../components/BrandLogo.js";
 import { SatelliteHubButton } from "../components/SatelliteHub.js";
 import { useAppearancePreferences } from "../composition/use-appearance-preferences.js";
 import type { AppSurface } from "../lib/app-surface.js";
+import { t } from "../lib/i18n.js";
 import { useSurfaceNavigation } from "../lib/surface-navigation.js";
 import { useStore } from "../lib/store.js";
 import { NotesPage } from "../surfaces/notes-panel/notes-page.js";
@@ -65,7 +66,7 @@ function TopBar({
     <header className="top-bar">
       <div className="top-left">
         <button
-          aria-label="Mostrar u ocultar navegación"
+          aria-label={t("Mostrar u ocultar navegación")}
           className="navigation-toggle"
           onClick={toggleSidebar}
           type="button"
@@ -94,27 +95,27 @@ function TopBar({
               icon={<FilePlus size={13} />}
               onClick={() => addNote()}
             >
-              Nota
+              {t("Nota")}
             </TopAction>
             <TopAction
               disabled={!notebookRoot}
               icon={<FolderPlus size={13} />}
               onClick={() => addFolder()}
             >
-              Carpeta
+              {t("Carpeta")}
             </TopAction>
             <SatelliteHubButton />
           </>
         ) : null}
         <AppearanceMenu />
         <button
-          aria-label="Abrir configuración"
+          aria-label={t("Abrir configuración")}
           aria-pressed={activeSurface === "settings"}
           className={`top-settings-button ${
             activeSurface === "settings" ? "is-active" : ""
           }`}
           onClick={onToggleSettings}
-          title="Configuración"
+          title={t("Configuración")}
           type="button"
         >
           <Settings size={15} strokeWidth={1.7} />

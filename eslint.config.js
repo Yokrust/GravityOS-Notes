@@ -10,7 +10,9 @@ export default tseslint.config(
       "**/Gravity/**",
       "**/node_modules/**",
       "**/playwright-report/**",
-      "**/test-results/**"
+      "**/test-results/**",
+      // Generated Spanish accent lexicon: one ~1.6 MB string literal.
+      "apps/desktop/src/renderer/lib/spanish-accents-data.ts"
     ]
   },
   js.configs.recommended,

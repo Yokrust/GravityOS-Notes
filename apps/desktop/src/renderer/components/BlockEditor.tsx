@@ -48,7 +48,12 @@ import {
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
+import { getLanguage, t } from "../lib/i18n.js";
 import { ASSET_DND_MIME, type AssetDragPayload } from "../lib/media-kind.js";
+import {
+  autocorrectCaretWord,
+  correctSpanishText
+} from "../lib/spanish-accents.js";
 
 const uid = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -1346,7 +1351,7 @@ export function buildEditorUnits(blocks: Block[]): EditorUnit[] {
 }
 
 const CODE_LANGUAGE_OPTIONS = [
-  { label: "Automático", value: "" },
+  { label: t("Automático"), value: "" },
   { label: "JavaScript", value: "javascript" },
   { label: "TypeScript", value: "typescript" },
   { label: "Python", value: "python" },
@@ -1437,80 +1442,80 @@ interface SlashOption {
 const SLASH_OPTIONS: SlashOption[] = [
   {
     key: "p",
-    label: "Texto",
-    hint: "Párrafo simple",
+    label: t("Texto"),
+    hint: t("Párrafo simple"),
     icon: <Type size={14} />,
     match: ["text", "texto", "parrafo", "párrafo", "p"],
     apply: (block) => ({ ...block, type: "p", text: "" })
   },
   {
     key: "h1",
-    label: "Encabezado 1",
-    hint: "Título principal",
+    label: t("Encabezado 1"),
+    hint: t("Título principal"),
     icon: <Heading1 size={14} />,
     match: ["h1", "heading1", "heading 1", "titulo", "título", "encabezado"],
     apply: (block) => ({ ...block, type: "h1", text: "" })
   },
   {
     key: "h2",
-    label: "Encabezado 2",
-    hint: "Sección",
+    label: t("Encabezado 2"),
+    hint: t("Sección"),
     icon: <Heading2 size={14} />,
     match: ["h2", "heading2", "seccion", "sección"],
     apply: (block) => ({ ...block, type: "h2", text: "" })
   },
   {
     key: "h3",
-    label: "Encabezado 3",
-    hint: "Sub-sección",
+    label: t("Encabezado 3"),
+    hint: t("Sub-sección"),
     icon: <Heading3 size={14} />,
     match: ["h3", "heading3"],
     apply: (block) => ({ ...block, type: "h3", text: "" })
   },
   {
     key: "bullet",
-    label: "Lista",
-    hint: "Viñetas",
+    label: t("Lista"),
+    hint: t("Viñetas"),
     icon: <List size={14} />,
     match: ["bullet", "list", "lista", "viñeta", "vinetas"],
     apply: (block) => ({ ...block, type: "bullet", text: "" })
   },
   {
     key: "todo",
-    label: "Tarea",
-    hint: "Casilla con texto",
+    label: t("Tarea"),
+    hint: t("Casilla con texto"),
     icon: <CheckSquare size={14} />,
     match: ["todo", "tarea", "check", "checkbox"],
     apply: (block) => ({ ...block, type: "todo", text: "", checked: false })
   },
   {
     key: "quote",
-    label: "Cita",
-    hint: "Frase destacada",
+    label: t("Cita"),
+    hint: t("Frase destacada"),
     icon: <Quote size={14} />,
     match: ["quote", "cita", "blockquote"],
     apply: (block) => ({ ...block, type: "quote", text: "" })
   },
   {
     key: "code",
-    label: "Código",
-    hint: "Bloque monoespaciado",
+    label: t("Código"),
+    hint: t("Bloque monoespaciado"),
     icon: <Code2 size={14} />,
     match: ["code", "codigo", "código"],
     apply: (block) => ({ ...block, type: "code", text: "" })
   },
   {
     key: "divider",
-    label: "Divisor",
-    hint: "Línea horizontal",
+    label: t("Divisor"),
+    hint: t("Línea horizontal"),
     icon: <Minus size={14} />,
     match: ["divider", "divisor", "linea", "línea", "hr"],
     apply: (block) => ({ ...block, type: "divider", text: "" })
   },
   {
     key: "image",
-    label: "Imagen",
-    hint: "Archivo local redimensionable",
+    label: t("Imagen"),
+    hint: t("Archivo local redimensionable"),
     icon: <ImageIcon size={14} />,
     match: ["image", "imagen", "foto", "picture", "gif", "gifs"],
     apply: (block) => ({
@@ -1523,8 +1528,8 @@ const SLASH_OPTIONS: SlashOption[] = [
   },
   {
     key: "video",
-    label: "Video",
-    hint: "YouTube, Vimeo, Loom y más",
+    label: t("Video"),
+    hint: t("YouTube, Vimeo, Loom y más"),
     icon: <Video size={14} />,
     match: ["video", "youtube", "vimeo", "loom"],
     apply: (block) => ({
@@ -1537,8 +1542,8 @@ const SLASH_OPTIONS: SlashOption[] = [
   },
   {
     key: "table",
-    label: "Tabla",
-    hint: "2 × 2 editable",
+    label: t("Tabla"),
+    hint: t("2 × 2 editable"),
     icon: <TableIcon size={14} />,
     match: ["table", "tabla"],
     apply: (block) => ({
@@ -2633,21 +2638,21 @@ function getBlockLabel(block: Block): string {
     todo: "Tarea",
     video: "Video"
   };
-  return labels[block.type];
+  return t(labels[block.type]);
 }
 
 function getBlockPreview(block: Block): string {
-  if (block.type === "divider") return "Línea divisoria";
+  if (block.type === "divider") return t("Línea divisoria");
   if (block.type === "table") {
     const rows = block.rows?.length ?? TABLE_MIN_ROWS;
     const columns = block.rows?.[0]?.length ?? TABLE_MIN_COLUMNS;
     return `${rows} × ${columns}`;
   }
-  if (block.type === "image") return block.alt || "Imagen";
+  if (block.type === "image") return block.alt || t("Imagen");
   if (block.type === "video") {
     return normalizeVideoSource(block.source ?? "")?.provider ?? "Video";
   }
-  return block.text.trim().slice(0, 64) || "Bloque vacío";
+  return block.text.trim().slice(0, 64) || t("Bloque vacío");
 }
 
 function BlockFrame({
@@ -2691,10 +2696,10 @@ function BlockFrame({
       aria-label={
         mediaInserterPosition
           ? mediaInserterPosition === "before"
-            ? "Escribir antes del bloque"
+            ? t("Escribir antes del bloque")
             : mediaInserterPosition === "after"
-              ? "Escribir después del bloque"
-              : "Escribir entre los bloques"
+              ? t("Escribir después del bloque")
+              : t("Escribir entre los bloques")
           : undefined
       }
       data-media-inserter={mediaInserterPosition ? "true" : undefined}
@@ -2713,7 +2718,9 @@ function BlockFrame({
       }
     >
       <button
-        aria-label={`Arrastrar bloque: ${getBlockLabel(block)}`}
+        aria-label={t("Arrastrar bloque: {label}", {
+          label: getBlockLabel(block)
+        })}
         className="editor-block__handle"
         onPointerDown={onDragStart}
         type="button"
@@ -2755,8 +2762,8 @@ function BlockDragOverlay({
         <Trash2 aria-hidden="true" size={18} />
         <span>
           {drag.overTrash
-            ? "Suelta para eliminar"
-            : "Arrastra aquí para eliminar"}
+            ? t("Suelta para eliminar")
+            : t("Arrastra aquí para eliminar")}
         </span>
       </motion.div>
     </>
@@ -2803,19 +2810,27 @@ function InlineFormattingToolbar({
     icon: ReactNode;
     label: string;
   }> = [
-    { format: "bold", icon: <Bold size={17} />, label: "Negrita" },
-    { format: "italic", icon: <Italic size={17} />, label: "Cursiva" },
-    { format: "underline", icon: <Underline size={17} />, label: "Subrayado" },
+    { format: "bold", icon: <Bold size={17} />, label: t("Negrita") },
+    { format: "italic", icon: <Italic size={17} />, label: t("Cursiva") },
+    {
+      format: "underline",
+      icon: <Underline size={17} />,
+      label: t("Subrayado")
+    },
     {
       format: "strike",
       icon: <Strikethrough size={17} />,
-      label: "Tachado"
+      label: t("Tachado")
     },
-    { format: "code", icon: <CodeXml size={17} />, label: "Código en línea" },
+    {
+      format: "code",
+      icon: <CodeXml size={17} />,
+      label: t("Código en línea")
+    },
     {
       format: "clear",
       icon: <RemoveFormatting size={17} />,
-      label: "Quitar formato"
+      label: t("Quitar formato")
     }
   ];
 
@@ -2853,11 +2868,11 @@ function InlineFormattingToolbar({
           </button>
         ))}
         <button
-          aria-label="Enlace"
+          aria-label={t("Enlace")}
           aria-pressed={activeFormats.includes("link")}
           className="inline-format-toolbar__button"
           onClick={() => setLinkOpen((current) => !current)}
-          title="Enlace"
+          title={t("Enlace")}
           type="button"
         >
           <Link2 size={17} />
@@ -2880,12 +2895,12 @@ function InlineFormattingToolbar({
       </div>
 
       <div className="inline-format-toolbar__highlights">
-        <span title="Marcatexto">
+        <span title={t("Marcatexto")}>
           <Highlighter aria-hidden="true" size={15} />
         </span>
         {INLINE_HIGHLIGHT_COLORS.map((color) => (
           <button
-            aria-label={`Marcatexto ${color}`}
+            aria-label={t("Marcatexto {color}", { color })}
             className="inline-format-toolbar__swatch"
             data-highlight={color}
             key={color}
@@ -2894,24 +2909,36 @@ function InlineFormattingToolbar({
           />
         ))}
         <button
-          aria-label="Quitar marcatexto"
+          aria-label={t("Quitar marcatexto")}
           className="inline-format-toolbar__swatch is-clear"
           onClick={() => onFormat("remove-highlight")}
-          title="Quitar marcatexto"
+          title={t("Quitar marcatexto")}
           type="button"
         />
       </div>
       <div
-        aria-label="Alinear texto"
+        aria-label={t("Alinear texto")}
         className="inline-format-toolbar__alignment"
         role="group"
       >
         {(
           [
-            ["left", "Alinear texto a la izquierda", <AlignLeft key="left" />],
-            ["center", "Centrar texto", <AlignCenter key="center" />],
-            ["right", "Alinear texto a la derecha", <AlignRight key="right" />],
-            ["justify", "Justificar texto", <TextAlignJustify key="justify" />]
+            [
+              "left",
+              t("Alinear texto a la izquierda"),
+              <AlignLeft key="left" />
+            ],
+            ["center", t("Centrar texto"), <AlignCenter key="center" />],
+            [
+              "right",
+              t("Alinear texto a la derecha"),
+              <AlignRight key="right" />
+            ],
+            [
+              "justify",
+              t("Justificar texto"),
+              <TextAlignJustify key="justify" />
+            ]
           ] as const
         ).map(([value, label, icon]) => (
           <button
@@ -2938,13 +2965,13 @@ function InlineFormattingToolbar({
             onSubmit={submitLink}
           >
             <input
-              aria-label="Dirección del enlace"
+              aria-label={t("Dirección del enlace")}
               autoFocus
               onChange={(event) => setLinkValue(event.target.value)}
               placeholder="https://..."
               value={linkValue}
             />
-            <button type="submit">Aplicar</button>
+            <button type="submit">{t("Aplicar")}</button>
           </motion.form>
         ) : null}
       </AnimatePresence>
@@ -3126,9 +3153,17 @@ function BlockView({
     }
   };
 
-  const handleInput = () => {
+  const handleInput = (event?: FormEvent<HTMLDivElement>) => {
     const element = ref.current;
     if (!element) return;
+    // Word-by-word accent correction while typing (Spanish only). Skip during
+    // IME composition so dead-key accents aren't disturbed mid-character.
+    if (
+      getLanguage() === "es" &&
+      !(event?.nativeEvent as InputEvent | undefined)?.isComposing
+    ) {
+      autocorrectCaretWord(element);
+    }
     const text = element.textContent ?? "";
     const markdown = serializeInlineContent(element);
     element.dataset.inlineMarkdown = markdown;
@@ -3193,20 +3228,20 @@ function BlockView({
 
   const placeholder =
     block.type === "p"
-      ? "Escribe '/' para comandos…"
+      ? t("Escribe '/' para comandos…")
       : block.type === "h1"
-        ? "Encabezado 1"
+        ? t("Encabezado 1")
         : block.type === "h2"
-          ? "Encabezado 2"
+          ? t("Encabezado 2")
           : block.type === "h3"
-            ? "Encabezado 3"
+            ? t("Encabezado 3")
             : block.type === "quote"
-              ? "Cita…"
+              ? t("Cita…")
               : block.type === "bullet"
-                ? "Elemento de lista"
+                ? t("Elemento de lista")
                 : block.type === "todo"
-                  ? "Tarea"
-                  : "Código";
+                  ? t("Tarea")
+                  : t("Código");
 
   // Block typography (size, weight, leading, spacing, color) is owned by CSS in
   // `.note-editor-content [data-block-type=…]` — the single source of truth.
@@ -3238,8 +3273,13 @@ function BlockView({
         const element = ref.current;
         if (!element) return;
         const markdown = serializeInlineContent(element);
+        // In Spanish, fix accents on the finished block. Keeping the dataset at
+        // the pre-correction markdown lets the layout effect re-render the DOM
+        // when the corrected text differs, so the fix is shown immediately.
+        const corrected =
+          getLanguage() === "es" ? correctSpanishText(markdown) : markdown;
         element.dataset.inlineMarkdown = markdown;
-        onUpdate({ text: markdown });
+        onUpdate({ text: corrected });
       }}
       onInput={handleInput}
       onKeyDown={handleKeyDown}
@@ -3514,7 +3554,7 @@ function MediaBlock({
     };
   }, [alignment, grouped, onUpdate, resizing, wrapped]);
 
-  const mediaLabel = block.type === "image" ? "imagen" : "video";
+  const mediaLabel = block.type === "image" ? t("imagen") : t("video");
 
   return (
     <motion.div
@@ -3549,12 +3589,12 @@ function MediaBlock({
           <button
             aria-expanded={menuOpen}
             aria-haspopup="menu"
-            aria-label={`Opciones de ${mediaLabel}`}
+            aria-label={t("Opciones de {mediaLabel}", { mediaLabel })}
             className={`media-block__handle ${menuOpen ? "is-open" : ""}`}
             data-media-handle
             onClick={toggleMenu}
             ref={handleRef}
-            title="Acomodar"
+            title={t("Acomodar")}
             type="button"
           >
             <SlidersHorizontal size={14} />
@@ -3572,29 +3612,35 @@ function MediaBlock({
                   }}
                 >
                   <div
-                    aria-label={`Ajuste de texto para ${mediaLabel}`}
+                    aria-label={t("Ajuste de texto para {mediaLabel}", {
+                      mediaLabel
+                    })}
                     className="media-block__menu-group"
                     role="group"
                   >
                     <span className="media-block__menu-label">
-                      Ajuste de texto
+                      {t("Ajuste de texto")}
                     </span>
                     <div className="media-block__menu-row">
                       {(
                         [
                           [
                             "none",
-                            "Sin ajuste",
+                            t("Sin ajuste"),
                             <Rows3 key="none" size={15} />
                           ],
                           [
                             "left",
-                            `Texto a la derecha de la ${mediaLabel}`,
+                            t("Texto a la derecha de la {mediaLabel}", {
+                              mediaLabel
+                            }),
                             <AlignLeft key="left" size={15} />
                           ],
                           [
                             "right",
-                            `Texto a la izquierda de la ${mediaLabel}`,
+                            t("Texto a la izquierda de la {mediaLabel}", {
+                              mediaLabel
+                            }),
                             <AlignRight key="right" size={15} />
                           ]
                         ] as const
@@ -3619,39 +3665,46 @@ function MediaBlock({
                   </div>
                   {mediaWrap === "none" ? (
                     <div
-                      aria-label={`Alinear ${mediaLabel}`}
+                      aria-label={t("Alinear {mediaLabel} al centro", {
+                        mediaLabel
+                      })}
                       className="media-block__menu-group"
                       role="group"
                     >
                       <span className="media-block__menu-label">
-                        Alineación
+                        {t("Alineación")}
                       </span>
                       <div className="media-block__menu-row">
                         {(
                           [
                             [
                               "left",
-                              "Izquierda",
+                              t("Izquierda"),
+                              t("Alinear {mediaLabel} a la izquierda", {
+                                mediaLabel
+                              }),
                               <AlignLeft key="left" size={15} />
                             ],
                             [
                               "center",
-                              "Centro",
+                              t("Centro"),
+                              t("Alinear {mediaLabel} al centro", {
+                                mediaLabel
+                              }),
                               <AlignCenter key="center" size={15} />
                             ],
                             [
                               "right",
-                              "Derecha",
+                              t("Derecha"),
+                              t("Alinear {mediaLabel} a la derecha", {
+                                mediaLabel
+                              }),
                               <AlignRight key="right" size={15} />
                             ]
                           ] as const
-                        ).map(([value, label, icon]) => (
+                        ).map(([value, label, ariaLabel, icon]) => (
                           <button
-                            aria-label={`Alinear ${mediaLabel} ${
-                              value === "center"
-                                ? "al centro"
-                                : `a la ${label.toLowerCase()}`
-                            }`}
+                            aria-label={ariaLabel}
                             aria-pressed={alignment === value}
                             key={value}
                             onClick={() => onUpdate({ alignment: value })}
@@ -3665,11 +3718,13 @@ function MediaBlock({
                     </div>
                   ) : null}
                   <div
-                    aria-label={`Tamaño de la ${mediaLabel}`}
+                    aria-label={t("Tamaño de la {mediaLabel}", { mediaLabel })}
                     className="media-block__menu-group"
                     role="group"
                   >
-                    <span className="media-block__menu-label">Tamaño</span>
+                    <span className="media-block__menu-label">
+                      {t("Tamaño")}
+                    </span>
                     <div className="media-block__menu-row">
                       {([25, 50, 75, 100] as const).map((preset) => (
                         <button
@@ -3698,7 +3753,7 @@ function MediaBlock({
           ) : (
             <div className="media-block__fallback">
               <ImageIcon aria-hidden="true" size={24} />
-              <span>No se pudo cargar la imagen</span>
+              <span>{t("No se pudo cargar la imagen")}</span>
             </div>
           )
         ) : video?.kind === "direct" ? (
@@ -3715,7 +3770,7 @@ function MediaBlock({
         ) : (
           <div className="media-block__fallback">
             <Video aria-hidden="true" size={24} />
-            <span>Enlace de video no compatible</span>
+            <span>{t("Enlace de video no compatible")}</span>
           </div>
         )}
         {(alignment === "left"
@@ -3725,7 +3780,15 @@ function MediaBlock({
             : (["left", "right"] as const)
         ).map((edge) => (
           <button
-            aria-label={`Redimensionar ${mediaLabel} desde la esquina ${edge === "left" ? "izquierda" : "derecha"}`}
+            aria-label={
+              edge === "left"
+                ? t("Redimensionar {mediaLabel} desde la esquina izquierda", {
+                    mediaLabel
+                  })
+                : t("Redimensionar {mediaLabel} desde la esquina derecha", {
+                    mediaLabel
+                  })
+            }
             className={`media-block__resize-corner is-${edge}`}
             key={edge}
             onPointerDown={(event) => {
@@ -3754,7 +3817,7 @@ function MediaBlock({
               };
               setResizing(true);
             }}
-            title="Arrastra para cambiar el tamaño"
+            title={t("Arrastra para cambiar el tamaño")}
             type="button"
           />
         ))}
@@ -3802,11 +3865,13 @@ function VideoDialog({
           <Video aria-hidden="true" size={20} />
         </div>
         <div>
-          <h2>Insertar video</h2>
-          <p>YouTube, Vimeo, Loom, Dailymotion o un archivo HTTPS directo.</p>
+          <h2>{t("Insertar video")}</h2>
+          <p>
+            {t("YouTube, Vimeo, Loom, Dailymotion o un archivo HTTPS directo.")}
+          </p>
         </div>
         <input
-          aria-label="Enlace del video"
+          aria-label={t("Enlace del video")}
           autoFocus
           onChange={(event) => {
             setSource(event.target.value);
@@ -3817,14 +3882,14 @@ function VideoDialog({
         />
         {invalid ? (
           <span className="media-dialog__error">
-            Usa un enlace HTTPS de un proveedor compatible.
+            {t("Usa un enlace HTTPS de un proveedor compatible.")}
           </span>
         ) : null}
         <div className="media-dialog__actions">
           <button onClick={onClose} type="button">
-            Cancelar
+            {t("Cancelar")}
           </button>
-          <button type="submit">Insertar</button>
+          <button type="submit">{t("Insertar")}</button>
         </div>
       </motion.form>
     </motion.div>
@@ -3872,7 +3937,7 @@ function CodeBlock({
       (option) => option.value === highlighted.language
     )?.label ??
     highlighted.language ??
-    "Texto";
+    t("Texto");
 
   return (
     <motion.div
@@ -3887,11 +3952,11 @@ function CodeBlock({
           <span />
           <span />
         </div>
-        <span className="code-editor__title">Código</span>
+        <span className="code-editor__title">{t("Código")}</span>
         <label className="code-editor__language">
-          <span className="sr-only">Lenguaje</span>
+          <span className="sr-only">{t("Lenguaje")}</span>
           <select
-            aria-label="Lenguaje del código"
+            aria-label={t("Lenguaje del código")}
             onChange={(event) =>
               onUpdate({
                 language: event.target.value || undefined
@@ -3920,7 +3985,7 @@ function CodeBlock({
           ref={highlightRef}
         />
         <textarea
-          aria-label="Código"
+          aria-label={t("Código")}
           autoCapitalize="off"
           autoComplete="off"
           autoCorrect="off"
@@ -3972,7 +4037,7 @@ function CodeBlock({
             highlight.scrollTop = event.currentTarget.scrollTop;
             highlight.scrollLeft = event.currentTarget.scrollLeft;
           }}
-          placeholder="Escribe o pega código…"
+          placeholder={t("Escribe o pega código…")}
           ref={textareaRef}
           spellCheck={false}
           value={block.text}
@@ -4002,7 +4067,7 @@ function DividerBlock({
   return (
     <motion.div
       animate={{ opacity: 1, y: 0 }}
-      aria-label="Divisor"
+      aria-label={t("Divisor")}
       className="group relative my-3 cursor-default rounded-sm py-2 outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)]"
       data-block-type="divider"
       initial={{ opacity: 0, y: 4 }}
@@ -4158,7 +4223,7 @@ function TableBlock({
           {rows.length} × {columns}
         </span>
         <button
-          aria-label="Redimensionar tabla"
+          aria-label={t("Redimensionar tabla")}
           className="table-block__resize-handle"
           onPointerDown={(event) => {
             if (event.button !== 0) return;
@@ -4174,7 +4239,7 @@ function TableBlock({
             };
             setResizing(true);
           }}
-          title="Arrastra para añadir o quitar filas y columnas"
+          title={t("Arrastra para añadir o quitar filas y columnas")}
           type="button"
         >
           <span />
@@ -4364,7 +4429,7 @@ function SlashMenu({
       transition={{ duration: 0.15 }}
     >
       <div className="px-2.5 pt-1 pb-1.5 text-[9.5px] font-semibold uppercase tracking-[0.18em] text-[color:var(--faint)]">
-        Bloques
+        {t("Bloques")}
       </div>
       <div className="flex flex-col">
         {filtered.map((option, index) => (

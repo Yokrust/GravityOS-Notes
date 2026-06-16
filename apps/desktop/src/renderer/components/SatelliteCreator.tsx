@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { ArrowLeft, Loader2, Sparkles, Trash2, X } from "lucide-react";
 
+import { t } from "@/lib/i18n";
 import { useStore } from "@/lib/store";
 import {
   CUSTOM_SATELLITE_COLOR_LIST,
@@ -55,7 +56,9 @@ export function SatelliteCreator({
     try {
       if (!window.gravity?.generateCustomSatellite) {
         throw new Error(
-          "La generación de Satellites está disponible en la app de escritorio."
+          t(
+            "La generación de Satellites está disponible en la app de escritorio."
+          )
         );
       }
       setProposal(await window.gravity.generateCustomSatellite(description));
@@ -83,7 +86,7 @@ export function SatelliteCreator({
     <div className="satellite-creator-backdrop" role="presentation">
       <motion.section
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        aria-label="Crear Satellite"
+        aria-label={t("Crear Satellite")}
         aria-modal="true"
         className="glass-strong satellite-creator"
         initial={{ opacity: 0, scale: 0.985, y: 12 }}
@@ -94,10 +97,12 @@ export function SatelliteCreator({
           <div>
             <span>Create Satellite</span>
             <h2>
-              {proposal ? "Revisa la propuesta" : "Describe la herramienta"}
+              {proposal
+                ? t("Revisa la propuesta")
+                : t("Describe la herramienta")}
             </h2>
           </div>
-          <button aria-label="Cerrar" onClick={onClose} type="button">
+          <button aria-label={t("Cerrar")} onClick={onClose} type="button">
             <X size={16} />
           </button>
         </header>
@@ -114,10 +119,10 @@ export function SatelliteCreator({
                 type="button"
               >
                 <ArrowLeft size={14} />
-                Cambiar descripción
+                {t("Cambiar descripción")}
               </button>
               <label>
-                <span>Nombre</span>
+                <span>{t("Nombre")}</span>
                 <input
                   maxLength={50}
                   value={proposal.name}
@@ -127,7 +132,7 @@ export function SatelliteCreator({
                 />
               </label>
               <label>
-                <span>Descripción</span>
+                <span>{t("Descripción")}</span>
                 <textarea
                   maxLength={200}
                   rows={2}
@@ -141,7 +146,7 @@ export function SatelliteCreator({
                 />
               </label>
               <fieldset>
-                <legend>Color</legend>
+                <legend>{t("Color")}</legend>
                 <div className="satellite-creator-colors">
                   {CUSTOM_SATELLITE_COLOR_LIST.map((color) => (
                     <button
@@ -159,7 +164,7 @@ export function SatelliteCreator({
               </fieldset>
               <div className="satellite-creator-properties">
                 <div className="satellite-creator-section-title">
-                  <span>Información</span>
+                  <span>{t("Información")}</span>
                   <span>{proposal.properties.length}</span>
                 </div>
                 {proposal.properties.map((property, index) => (
@@ -168,7 +173,9 @@ export function SatelliteCreator({
                     key={`${property.key}-${index}`}
                   >
                     <input
-                      aria-label={`Nombre de ${property.label}`}
+                      aria-label={t("Nombre de {label}", {
+                        label: property.label
+                      })}
                       maxLength={50}
                       value={property.label}
                       onChange={(event) =>
@@ -185,7 +192,9 @@ export function SatelliteCreator({
                     />
                     <span>{property.valueType}</span>
                     <button
-                      aria-label={`Quitar ${property.label}`}
+                      aria-label={t("Quitar {label}", {
+                        label: property.label
+                      })}
                       disabled={proposal.properties.length === 1}
                       onClick={() =>
                         setProposal({
@@ -214,7 +223,7 @@ export function SatelliteCreator({
                   >
                     <CustomSatelliteIcon icon={proposal.icon} size={14} />
                   </span>
-                  <strong>{proposal.name || "Sin nombre"}</strong>
+                  <strong>{proposal.name || t("Sin nombre")}</strong>
                 </header>
                 {proposal.description ? <p>{proposal.description}</p> : null}
                 <CustomSatelliteFields
@@ -230,7 +239,7 @@ export function SatelliteCreator({
                 <p className="satellite-creator-error">{error}</p>
               ) : null}
               <button onClick={onClose} type="button">
-                Cancelar
+                {t("Cancelar")}
               </button>
               <button
                 className="satellite-creator-primary"
@@ -241,26 +250,28 @@ export function SatelliteCreator({
                 type="button"
               >
                 {saving ? <Loader2 className="animate-spin" size={15} /> : null}
-                {saving ? "Guardando" : "Guardar Satellite"}
+                {saving ? t("Guardando") : t("Guardar Satellite")}
               </button>
             </footer>
           </div>
         ) : (
           <div className="satellite-creator-description-step">
             <label htmlFor="satellite-description">
-              ¿Qué debe ayudarte a hacer este Satellite?
+              {t("¿Qué debe ayudarte a hacer este Satellite?")}
             </label>
             <textarea
               autoFocus
               id="satellite-description"
               maxLength={500}
-              placeholder="Ejemplo: Quiero organizar los personajes de una novela."
+              placeholder={t(
+                "Ejemplo: Quiero organizar los personajes de una novela."
+              )}
               value={description}
               onChange={(event) => setDescription(event.target.value)}
             />
             <div className="satellite-creator-description-meta">
               <span>{description.length}/500</span>
-              <span>La IA no accede a tus Notes ni archivos.</span>
+              <span>{t("La IA no accede a tus Notes ni archivos.")}</span>
             </div>
             {error ? <p className="satellite-creator-error">{error}</p> : null}
             <button
@@ -276,7 +287,7 @@ export function SatelliteCreator({
               ) : (
                 <Sparkles size={15} />
               )}
-              {generating ? "Generando" : "Generar Satellite"}
+              {generating ? t("Generando") : t("Generar Satellite")}
             </button>
           </div>
         )}
@@ -292,5 +303,5 @@ function describeError(cause: unknown): string {
         /^Error invoking remote method '[^']+': Error:\s*/,
         ""
       )
-    : "No se pudo crear el Satellite.";
+    : t("No se pudo crear el Satellite.");
 }

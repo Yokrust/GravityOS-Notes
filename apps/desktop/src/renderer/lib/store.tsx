@@ -19,6 +19,7 @@ import type {
   Satellite,
   SatelliteMeta
 } from "./types";
+import { t } from "./i18n.js";
 import { reminderFiresNow } from "./reminder-utils";
 import {
   type PomodoroMode,
@@ -156,7 +157,7 @@ const initialState: State = {
   quickNotes: [
     {
       id: "qn-seed",
-      title: "Sin título",
+      title: t("Sin título"),
       content: "",
       updatedAt: Date.now()
     }
@@ -459,7 +460,7 @@ function reducer(state: State, action: Action): State {
     case "create-quick-note": {
       const note: QuickNote = {
         id: action.id,
-        title: "Sin título",
+        title: t("Sin título"),
         content: "",
         updatedAt: Date.now()
       };
@@ -609,7 +610,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       new CustomSatelliteMutationCoordinator({
         loadState: async () => {
           if (!window.gravity?.getCustomSatelliteState) {
-            throw new Error("No se pudo consultar el estado guardado.");
+            throw new Error(t("No se pudo consultar el estado guardado."));
           }
           return window.gravity.getCustomSatelliteState();
         },
@@ -745,10 +746,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     prevCompletionTickRef.current = pomodoroCompletionTick;
     const message =
       pomodoroMode === "focus"
-        ? "¡A enfocarte! Ciclo de foco (25 min)"
+        ? t("¡A enfocarte! Ciclo de foco (25 min)")
         : pomodoroMode === "short-break"
-          ? "¡Buen trabajo! Tómate un descanso (5 min)"
-          : "¡Gran sesión! Descanso largo (15 min)";
+          ? t("¡Buen trabajo! Tómate un descanso (5 min)")
+          : t("¡Gran sesión! Descanso largo (15 min)");
     if (typeof window !== "undefined" && "Notification" in window) {
       const fire = () => new Notification("Pomodoro", { body: message });
       if (Notification.permission === "granted") {
@@ -773,7 +774,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       for (const reminder of remindersRef.current) {
         if (!reminderFiresNow(reminder, now)) continue;
         const fire = () =>
-          new Notification("Recordatorio", { body: reminder.text });
+          new Notification(t("Recordatorio"), { body: reminder.text });
         if (typeof window !== "undefined" && "Notification" in window) {
           if (Notification.permission === "granted") {
             fire();
@@ -977,7 +978,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           dispatch({
             type: "set-custom-satellite-error",
             instanceId: id,
-            message: "Las imágenes deben pesar entre 1 byte y 5 MB."
+            message: t("Las imágenes deben pesar entre 1 byte y 5 MB.")
           });
           return;
         }
@@ -989,7 +990,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           dispatch({
             type: "set-custom-satellite-error",
             instanceId: id,
-            message: "Formato de imagen no compatible."
+            message: t("Formato de imagen no compatible.")
           });
           return;
         }
@@ -1135,7 +1136,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 function getErrorMessage(error: unknown): string {
   return error instanceof Error
     ? error.message
-    : "No se pudo actualizar el cuaderno.";
+    : t("No se pudo actualizar el cuaderno.");
 }
 
 export function useStore() {

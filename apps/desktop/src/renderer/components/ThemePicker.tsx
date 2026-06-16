@@ -11,6 +11,7 @@ import {
   rgbToPoint,
   type Rgb
 } from "../lib/ambient.js";
+import { t } from "../lib/i18n.js";
 
 const HARMONY_OPTIONS: Array<{
   type: AppearanceHarmonyRecord;
@@ -169,13 +170,13 @@ export function ThemePicker({
     <div className="theme-picker">
       <div className="theme-picker__toolbar">
         <div
-          aria-label="Esquema de color"
+          aria-label={t("Esquema de color")}
           className="theme-picker__schemes"
           role="group"
         >
           {SCHEME_OPTIONS.map(({ value: scheme, label, Icon }) => (
             <button
-              aria-label={label}
+              aria-label={t(label)}
               aria-pressed={value.scheme === scheme}
               className={`theme-picker__scheme ${
                 value.scheme === scheme ? "is-active" : ""
@@ -188,7 +189,7 @@ export function ThemePicker({
                   update({ ...value, scheme }, true);
                 }
               }}
-              title={label}
+              title={t(label)}
               type="button"
             >
               <Icon size={15} strokeWidth={1.75} />
@@ -197,15 +198,15 @@ export function ThemePicker({
         </div>
         <span className="theme-picker__mode-label">
           {value.harmony === "floating"
-            ? `${value.points.length} colores`
-            : "Paleta automática"}
+            ? t("{count} colores", { count: value.points.length })
+            : t("Paleta automática")}
         </span>
       </div>
 
       <div className="theme-picker__workspace">
         <div>
           <div
-            aria-label="Rueda de color"
+            aria-label={t("Rueda de color")}
             aria-valuetext={activeHex}
             className="theme-picker__wheel"
             onKeyDown={handleKeyDown}
@@ -233,15 +234,15 @@ export function ThemePicker({
             ))}
           </div>
           <p className="theme-picker__hint">
-            Arrastra un punto. En Libre, selecciona y mueve cada color.
+            {t("Arrastra un punto. En Libre, selecciona y mueve cada color.")}
           </p>
         </div>
 
         <div className="theme-picker__controls">
           <div>
-            <span className="theme-picker__control-label">Armonía</span>
+            <span className="theme-picker__control-label">{t("Armonía")}</span>
             <div
-              aria-label="Armonía"
+              aria-label={t("Armonía")}
               className="theme-picker__harmonies"
               role="group"
             >
@@ -266,7 +267,7 @@ export function ThemePicker({
                   }}
                   type="button"
                 >
-                  {label}
+                  {t(label)}
                 </button>
               ))}
             </div>
@@ -275,10 +276,12 @@ export function ThemePicker({
           {value.harmony === "floating" ? (
             <div>
               <div className="theme-picker__color-heading">
-                <span className="theme-picker__control-label">Colores</span>
+                <span className="theme-picker__control-label">
+                  {t("Colores")}
+                </span>
                 <div>
                   <button
-                    aria-label="Quitar color"
+                    aria-label={t("Quitar color")}
                     disabled={value.points.length <= 1}
                     onClick={removeColor}
                     type="button"
@@ -286,7 +289,7 @@ export function ThemePicker({
                     <Trash2 size={13} />
                   </button>
                   <button
-                    aria-label="Añadir color"
+                    aria-label={t("Añadir color")}
                     disabled={value.points.length >= 5}
                     onClick={addColor}
                     type="button"
@@ -300,7 +303,7 @@ export function ThemePicker({
                   const rgb = pointToRgb(point);
                   return (
                     <button
-                      aria-label={`Editar color ${index + 1}`}
+                      aria-label={t("Editar color {n}", { n: index + 1 })}
                       aria-pressed={index === activeIndex}
                       key={`${point.x}-${point.y}`}
                       onClick={() => {
@@ -317,10 +320,12 @@ export function ThemePicker({
           ) : null}
 
           <label className="theme-picker__custom">
-            <span className="theme-picker__control-label">Color activo</span>
+            <span className="theme-picker__control-label">
+              {t("Color activo")}
+            </span>
             <span>
               <input
-                aria-label="Color personalizado"
+                aria-label={t("Color personalizado")}
                 onChange={(event) => {
                   movePoint(rgbToPoint(hexToRgb(event.target.value)));
                   queueMicrotask(() => onCommit(latestRef.current));
@@ -333,7 +338,7 @@ export function ThemePicker({
           </label>
 
           <RangeControl
-            label="Opacidad"
+            label={t("Opacidad")}
             max={1}
             min={0.2}
             onChange={(opacity) => update({ ...value, opacity })}
@@ -342,7 +347,7 @@ export function ThemePicker({
             value={value.opacity}
           />
           <RangeControl
-            label="Textura"
+            label={t("Textura")}
             max={0.45}
             min={0}
             onChange={(texture) => update({ ...value, texture })}
@@ -351,7 +356,7 @@ export function ThemePicker({
             value={value.texture}
           />
           <RangeControl
-            label="Ángulo"
+            label={t("Ángulo")}
             max={180}
             min={-180}
             onChange={(rotation) => update({ ...value, rotation })}
@@ -369,7 +374,7 @@ export function ThemePicker({
         style={{ background: `${ambient.gradientCss}, var(--bg)` }}
       >
         <span>Gravity</span>
-        <small>Vista previa del ambiente</small>
+        <small>{t("Vista previa del ambiente")}</small>
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import { SatelliteCanvas } from "../../components/SatelliteCanvas.js";
 import type { AppSurface } from "../../lib/app-surface.js";
+import { t } from "../../lib/i18n.js";
 import { useStore } from "../../lib/store.js";
 
 import { NoteEditor } from "./note-editor.js";
@@ -19,7 +20,7 @@ export function NotesPage({
       className={`notes-surface ${sidebarOpen ? "is-sidebar-open" : "is-sidebar-closed"}`}
     >
       <button
-        aria-label="Cerrar navegación"
+        aria-label={t("Cerrar navegación")}
         className="notes-sidebar-backdrop"
         onClick={toggleSidebar}
         type="button"

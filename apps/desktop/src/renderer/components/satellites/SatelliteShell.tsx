@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { motion, useDragControls, useMotionValue } from "framer-motion";
 import { X } from "lucide-react";
 import type { Satellite } from "@/lib/types";
+import { t } from "@/lib/i18n";
 import { useStore } from "@/lib/store";
 import { useCanvasRef } from "@/lib/canvas-ref";
 
@@ -134,7 +135,7 @@ export function SatelliteShell({
           onPointerDown={(e) => e.stopPropagation()}
           onClick={() => (onClose ? onClose() : closeSatellite(sat.id))}
           className="sat-icon-btn ml-auto z-[1]"
-          title="Cerrar"
+          title={t("Cerrar")}
         >
           <X size={13} strokeWidth={1.75} />
         </button>

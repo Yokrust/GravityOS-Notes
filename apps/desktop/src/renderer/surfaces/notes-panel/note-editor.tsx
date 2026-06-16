@@ -5,17 +5,22 @@ import {
   BlockEditor,
   inlineMarkdownToPlainText
 } from "../../components/BlockEditor.js";
+import { dateLocale, getLanguage, t } from "../../lib/i18n.js";
+import {
+  autocorrectInputElement,
+  correctSpanishText
+} from "../../lib/spanish-accents.js";
 import { useStore } from "../../lib/store.js";
 
 function formatRelative(timestamp: number) {
   const diff = Date.now() - timestamp;
   const minutes = Math.floor(diff / 60_000);
-  if (minutes < 1) return "ahora";
-  if (minutes < 60) return `hace ${minutes} min`;
+  if (minutes < 1) return t("ahora");
+  if (minutes < 60) return t("hace {n} min", { n: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `hace ${hours} h`;
+  if (hours < 24) return t("hace {n} h", { n: hours });
   const days = Math.floor(hours / 24);
-  return `hace ${days} d`;
+  return t("hace {n} d", { n: days });
 }
 
 export function NoteEditor() {
@@ -87,22 +92,22 @@ export function NoteEditor() {
         <div>
           <h1>
             {notesLoading
-              ? "Leyendo cuaderno"
+              ? t("Leyendo cuaderno")
               : notebookRoot
-                ? "Selecciona una nota"
-                : "Abre tu carpeta de notas"}
+                ? t("Selecciona una nota")
+                : t("Abre tu carpeta de notas")}
           </h1>
           <p>
             {notebookRoot
-              ? "Elige una nota del árbol o crea una nueva."
-              : "Conecta una carpeta y empieza a escribir."}
+              ? t("Elige una nota del árbol o crea una nueva.")
+              : t("Conecta una carpeta y empieza a escribir.")}
           </p>
           <button
             onClick={notebookRoot ? () => addNote() : chooseNotebookRoot}
             type="button"
           >
             <Plus size={14} />
-            {notebookRoot ? "Nueva nota" : "Elegir carpeta"}
+            {notebookRoot ? t("Nueva nota") : t("Elegir carpeta")}
           </button>
         </div>
       </div>
@@ -119,17 +124,28 @@ export function NoteEditor() {
               <div className="note-date">
                 {new Date(
                   activeNote.updatedAt ?? Date.now()
-                ).toLocaleDateString("es-MX", {
+                ).toLocaleDateString(dateLocale(), {
                   day: "2-digit",
                   month: "long",
                   year: "numeric"
                 })}
               </div>
               <input
-                aria-label="Título de la nota"
+                aria-label={t("Título de la nota")}
                 className="note-title"
-                onChange={(event) => setTitle(event.target.value)}
-                placeholder="Sin título"
+                onBlur={(event) => {
+                  if (getLanguage() === "es") {
+                    setTitle(correctSpanishText(event.target.value));
+                  }
+                }}
+                onChange={(event) =>
+                  setTitle(
+                    getLanguage() === "es"
+                      ? autocorrectInputElement(event.target)
+                      : event.target.value
+                  )
+                }
+                placeholder={t("Sin título")}
                 value={title}
               />
 
@@ -137,10 +153,10 @@ export function NoteEditor() {
                 <span>
                   {activeNote.updatedAt
                     ? formatRelative(activeNote.updatedAt)
-                    : "ahora"}
+                    : t("ahora")}
                 </span>
-                <span>{stats.words} palabras</span>
-                <span>{stats.chars} caracteres</span>
+                <span>{t("{count} palabras", { count: stats.words })}</span>
+                <span>{t("{count} caracteres", { count: stats.chars })}</span>
               </div>
             </header>
 

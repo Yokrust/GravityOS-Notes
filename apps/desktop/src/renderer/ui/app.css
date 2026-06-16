@@ -5088,6 +5088,76 @@ kbd {
   font-size: 12px;
 }
 
+/* selector de idioma */
+
+.language-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.language-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  background: var(--bg-paper);
+  color: var(--ink);
+  text-align: left;
+  transition:
+    border-color 160ms var(--ease-out),
+    background 160ms var(--ease-out),
+    box-shadow 160ms var(--ease-out);
+}
+
+.language-option:hover {
+  background: var(--hover-1);
+}
+
+.language-option.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.language-option-flag {
+  display: grid;
+  height: 32px;
+  width: 32px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+}
+
+.language-option.is-active .language-option-flag {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.language-option-label {
+  flex: 1;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.language-option.is-active > svg {
+  color: var(--accent);
+}
+
+.language-hint {
+  margin: 14px 0 0;
+  color: var(--faint);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
 /* laboratorio de ambiente (theme picker) */
 
 .theme-picker {

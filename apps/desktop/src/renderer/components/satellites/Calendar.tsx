@@ -12,36 +12,24 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { SatelliteShell } from "./SatelliteShell";
+import { monthNames, t, weekdayInitials } from "@/lib/i18n";
 import { useStore } from "@/lib/store";
 import { reminderMatchesDate } from "@/lib/reminder-utils";
 import type { BuiltInSatellite, ReminderRecurrence } from "@/lib/types";
 
-const MONTHS = [
-  "Enero",
-  "Febrero",
-  "Marzo",
-  "Abril",
-  "Mayo",
-  "Junio",
-  "Julio",
-  "Agosto",
-  "Septiembre",
-  "Octubre",
-  "Noviembre",
-  "Diciembre"
-];
-const DOW = ["L", "M", "X", "J", "V", "S", "D"];
+const MONTHS = monthNames();
+const DOW = weekdayInitials();
 
 const RECURRENCE_LABELS: Record<ReminderRecurrence, string> = {
-  one: "Una vez",
-  daily: "Diario",
-  weekly: "Semanal"
+  one: t("Una vez"),
+  daily: t("Diario"),
+  weekly: t("Semanal")
 };
 
 const RECURRENCE_BADGE: Record<ReminderRecurrence, string | null> = {
   one: null,
-  daily: "diario",
-  weekly: "semanal"
+  daily: t("diario"),
+  weekly: t("semanal")
 };
 
 function isoDate(year: number, month0: number, day: number): string {
@@ -124,7 +112,11 @@ export function CalendarSatellite({ sat }: { sat: BuiltInSatellite }) {
       sat={sat}
       title={monthLabel}
       leftSlot={
-        <button className="sat-icon-btn" data-active="true" title="Calendario">
+        <button
+          className="sat-icon-btn"
+          data-active="true"
+          title={t("Calendario")}
+        >
           <CalendarDays size={13} strokeWidth={1.6} />
         </button>
       }
@@ -132,7 +124,9 @@ export function CalendarSatellite({ sat }: { sat: BuiltInSatellite }) {
         <>
           <span className="uppercase tracking-[0.18em]">
             {selectedReminders.length}{" "}
-            {selectedReminders.length === 1 ? "recordatorio" : "recordatorios"}
+            {selectedReminders.length === 1
+              ? t("recordatorio")
+              : t("recordatorios")}
           </span>
           <button
             onClick={() =>
@@ -140,7 +134,7 @@ export function CalendarSatellite({ sat }: { sat: BuiltInSatellite }) {
             }
             className="uppercase tracking-[0.18em] hover:text-[color:var(--sat-ink)] transition"
           >
-            Hoy
+            {t("Hoy")}
           </button>
         </>
       }
@@ -235,7 +229,7 @@ export function CalendarSatellite({ sat }: { sat: BuiltInSatellite }) {
             <button
               onClick={() => setComposing((v) => !v)}
               className="sat-icon-btn"
-              title="Añadir recordatorio"
+              title={t("Añadir recordatorio")}
               data-active={composing ? "true" : "false"}
             >
               <Plus size={12} strokeWidth={1.7} />
@@ -269,7 +263,7 @@ export function CalendarSatellite({ sat }: { sat: BuiltInSatellite }) {
                           setDraftReminder("");
                         }
                       }}
-                      placeholder="Recordatorio…"
+                      placeholder={t("Recordatorio…")}
                       className="flex-1 bg-transparent outline-none text-[12px] text-[color:var(--sat-ink)]"
                     />
                   </div>
@@ -310,7 +304,7 @@ export function CalendarSatellite({ sat }: { sat: BuiltInSatellite }) {
           <ul className="flex flex-col gap-0.5 overflow-y-auto scroll-thin">
             {selectedReminders.length === 0 && !composing && (
               <li className="text-[11.5px] text-[color:var(--sat-faint)] font-mono italic">
-                Sin recordatorios para este día.
+                {t("Sin recordatorios para este día.")}
               </li>
             )}
             {selectedReminders.map((r) => {
@@ -339,7 +333,7 @@ export function CalendarSatellite({ sat }: { sat: BuiltInSatellite }) {
                   <button
                     onClick={() => deleteReminder(r.id)}
                     className="sat-icon-btn opacity-0 group-hover:opacity-100"
-                    title={badge ? "Eliminar serie completa" : "Eliminar"}
+                    title={badge ? t("Eliminar serie completa") : t("Eliminar")}
                   >
                     <X size={11} strokeWidth={1.6} />
                   </button>

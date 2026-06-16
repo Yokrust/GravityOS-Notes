@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { t } from "@/lib/i18n";
+
 export function CustomSatelliteFields({
   data,
   disabled = false,
@@ -71,11 +73,11 @@ function FieldRow({
         </span>
         {canClear ? (
           <button
-            aria-label={`Limpiar ${property.label}`}
+            aria-label={t("Limpiar {label}", { label: property.label })}
             onClick={() => apply(null)}
             type="button"
           >
-            Limpiar
+            {t("Limpiar")}
           </button>
         ) : null}
       </div>
@@ -91,7 +93,7 @@ function FieldRow({
       )}
       {isInvalid ? (
         <span className="custom-satellite-required" role="status">
-          Requerido
+          {t("Requerido")}
         </span>
       ) : null}
     </div>
@@ -196,7 +198,7 @@ function renderInput(
             apply(event.target.value === "" ? null : event.target.value)
           }
         >
-          <option value="">Seleccionar</option>
+          <option value="">{t("Seleccionar")}</option>
           {property.options?.map((option) => (
             <option key={option} value={option}>
               {option}
@@ -265,7 +267,7 @@ function renderInput(
               onCommit?.(property.key, event.target.valueAsNumber)
             }
           />
-          <span>{value === null ? "Sin valor" : `${progress}%`}</span>
+          <span>{value === null ? t("Sin valor") : `${progress}%`}</span>
         </div>
       );
     }
@@ -348,7 +350,9 @@ function CustomSatelliteImageField({
       {source ? (
         <img alt="" src={source} />
       ) : (
-        <div className="custom-satellite-image-placeholder">Sin imagen</div>
+        <div className="custom-satellite-image-placeholder">
+          {t("Sin imagen")}
+        </div>
       )}
       <input
         accept="image/png,image/jpeg,image/webp,image/gif"

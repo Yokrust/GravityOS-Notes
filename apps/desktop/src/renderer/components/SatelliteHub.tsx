@@ -13,6 +13,7 @@ import {
   X
 } from "lucide-react";
 import type { BuiltInSatelliteKind, SatelliteKind } from "@/lib/types";
+import { t } from "@/lib/i18n";
 import { useStore } from "@/lib/store";
 import { canvasRef } from "@/lib/canvas-ref";
 import {
@@ -196,7 +197,7 @@ export function SatelliteHubButton() {
         >
           {hubOpen ? <X size={12} /> : <Sparkles size={12} />}
         </motion.span>
-        <span>Satélites</span>
+        <span>{t("Satélites")}</span>
         <span
           className={`inline-flex gap-[3px] ${hubOpen ? "opacity-90" : "opacity-70"}`}
         >
@@ -244,7 +245,7 @@ export function SatelliteHubButton() {
           >
             <div className="shrink-0 px-3 pt-2 pb-2 border-b border-[color:var(--line)] flex items-baseline justify-between">
               <div className="font-display text-[15px] font-semibold tracking-tight">
-                Satélites
+                {t("Satélites")}
               </div>
             </div>
             <div className="scroll-thin -mr-1 min-h-0 flex-1 overflow-y-auto pr-1">
@@ -300,11 +301,11 @@ export function SatelliteHubButton() {
                         />
                       </span>
                       <span className="font-display flex-1 truncate text-left text-[14px] font-semibold">
-                        {s.title}
+                        {t(s.title)}
                       </span>
                       {ghosted ? (
                         <span className="text-[11px] text-[color:var(--faint)]">
-                          Abierto
+                          {t("Abierto")}
                         </span>
                       ) : null}
                     </motion.button>
@@ -313,11 +314,11 @@ export function SatelliteHubButton() {
               </div>
               <div className="mt-1 border-t border-[color:var(--line)] pt-1">
                 <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--faint)]">
-                  Mis satélites
+                  {t("Mis satélites")}
                 </div>
                 {customSatelliteTypes.length === 0 ? (
                   <p className="px-3 pb-2 text-[11px] text-[color:var(--faint)]">
-                    Ninguno aún.
+                    {t("Ninguno aún.")}
                   </p>
                 ) : (
                   customSatelliteTypes.map((customType, index) => {
@@ -377,29 +378,39 @@ export function SatelliteHubButton() {
                             </span>
                             {closedInstance ? (
                               <span className="shrink-0 text-[11px] text-[color:var(--faint)]">
-                                Reabrir
+                                {t("Reabrir")}
                               </span>
                             ) : null}
                           </span>
                         </button>
                         <button
-                          aria-label={`Eliminar ${customType.name}`}
+                          aria-label={t("Eliminar {name}", {
+                            name: customType.name
+                          })}
                           className="mr-1 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[color:var(--faint)] opacity-60 transition hover:bg-[color:var(--hover-1)] hover:text-[color:var(--danger)] group-hover:opacity-100"
                           onClick={() => {
                             const instanceSummary =
                               instanceCount === 1
-                                ? "su instancia y todos sus datos"
-                                : `${instanceCount} instancias y todos sus datos`;
+                                ? t("su instancia y todos sus datos")
+                                : t("{count} instancias y todos sus datos", {
+                                    count: instanceCount
+                                  });
                             if (
                               window.confirm(
-                                `¿Eliminar permanentemente "${customType.name}", ${instanceSummary}?`
+                                t(
+                                  '¿Eliminar permanentemente "{name}", {summary}?',
+                                  {
+                                    name: customType.name,
+                                    summary: instanceSummary
+                                  }
+                                )
                               )
                             ) {
                               void deleteCustomSatelliteType(customType.id);
                             }
                           }}
                           onPointerDown={(event) => event.stopPropagation()}
-                          title="Eliminar Satellite inventado"
+                          title={t("Eliminar Satellite inventado")}
                           type="button"
                         >
                           <Trash2 size={13} strokeWidth={1.7} />
@@ -420,7 +431,7 @@ export function SatelliteHubButton() {
                 type="button"
               >
                 <Plus size={13} />
-                Crear Satellite
+                {t("Crear Satellite")}
               </button>
             </div>
           </motion.div>
@@ -441,7 +452,7 @@ export function SatelliteHubButton() {
 
 function DragGhost({ drag }: { drag: DragState }) {
   const isCustom = drag.source === "custom";
-  const title = isCustom ? drag.customType.name : drag.meta.title;
+  const title = isCustom ? drag.customType.name : t(drag.meta.title);
   const icon = isCustom ? (
     <CustomSatelliteIcon icon={drag.customType.icon} size={13} />
   ) : (

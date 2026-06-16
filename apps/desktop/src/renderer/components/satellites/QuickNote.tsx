@@ -12,6 +12,11 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SatelliteShell } from "./SatelliteShell";
+import { getLanguage, t } from "@/lib/i18n";
+import {
+  autocorrectInputElement,
+  correctSpanishText
+} from "@/lib/spanish-accents";
 import { useStore } from "@/lib/store";
 import { filterNotesByTitle, getLockedNoteIds } from "@/lib/quick-note-utils";
 import type { BuiltInSatellite, QuickNote } from "@/lib/types";
@@ -22,7 +27,7 @@ const FONT_SIZE_PX: Record<FontSize, number> = { sm: 12.5, md: 14, lg: 16 };
 function relativeTime(ts: number): string {
   const diff = Date.now() - ts;
   const m = Math.floor(diff / 60000);
-  if (m < 1) return "ahora";
+  if (m < 1) return t("ahora");
   if (m < 60) return `${m}m`;
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h`;
@@ -59,7 +64,7 @@ export function QuickNoteSatellite({ sat }: { sat: BuiltInSatellite }) {
     () => filterNotesByTitle(quickNotes, searchQuery),
     [quickNotes, searchQuery]
   );
-  const [draftTitle, setDraftTitle] = useState(note?.title ?? "Sin título");
+  const [draftTitle, setDraftTitle] = useState(note?.title ?? t("Sin título"));
   const [draftBody, setDraftBody] = useState(note?.content ?? "");
   const lastIdRef = useRef<string | null>(null);
 
@@ -109,7 +114,8 @@ export function QuickNoteSatellite({ sat }: { sat: BuiltInSatellite }) {
   };
 
   const charCount = draftBody.length;
-  const showTitle = draftTitle.trim() || "Sin título";
+  const showTitle = draftTitle.trim() || t("Sin título");
+  const autocorrect = getLanguage() === "es";
 
   return (
     <SatelliteShell
@@ -117,7 +123,11 @@ export function QuickNoteSatellite({ sat }: { sat: BuiltInSatellite }) {
       title={showTitle}
       leftSlot={
         <>
-          <button className="sat-icon-btn" data-active="true" title="Editar">
+          <button
+            className="sat-icon-btn"
+            data-active="true"
+            title={t("Editar")}
+          >
             <PencilLine size={13} strokeWidth={1.6} />
           </button>
           <button
@@ -127,14 +137,14 @@ export function QuickNoteSatellite({ sat }: { sat: BuiltInSatellite }) {
               setListOpen((v) => !v);
               setSearchQuery("");
             }}
-            title="Notas guardadas"
+            title={t("Notas guardadas")}
           >
             <Files size={13} strokeWidth={1.6} />
           </button>
           <button
             className="sat-icon-btn"
             onClick={handleNew}
-            title="Nueva nota"
+            title={t("Nueva nota")}
           >
             <Plus size={13} strokeWidth={1.7} />
           </button>
@@ -144,14 +154,16 @@ export function QuickNoteSatellite({ sat }: { sat: BuiltInSatellite }) {
         <>
           <span className="opacity-0">.</span>
           <span className="absolute left-1/2 -translate-x-1/2">
-            {charCount} {charCount === 1 ? "carácter" : "caracteres"}
+            {charCount === 1
+              ? t("{count} carácter", { count: charCount })
+              : t("{count} caracteres", { count: charCount })}
           </span>
           <button
             onClick={() =>
               setSize(size === "sm" ? "md" : size === "md" ? "lg" : "sm")
             }
             className="sat-icon-btn"
-            title="Tamaño de texto"
+            title={t("Tamaño de texto")}
           >
             <Type
               size={13}
@@ -173,14 +185,28 @@ export function QuickNoteSatellite({ sat }: { sat: BuiltInSatellite }) {
         {/* Editable title — sits inline above body for a single, calm column */}
         <input
           value={draftTitle}
-          onChange={(e) => setDraftTitle(e.target.value)}
-          placeholder="Título"
+          onBlur={(e) =>
+            autocorrect && setDraftTitle(correctSpanishText(e.target.value))
+          }
+          onChange={(e) =>
+            setDraftTitle(
+              autocorrect ? autocorrectInputElement(e.target) : e.target.value
+            )
+          }
+          placeholder={t("Título")}
           className="bg-transparent outline-none px-4 pt-3 pb-1 text-[15px] font-medium tracking-tight text-[color:var(--sat-ink)]"
         />
         <textarea
           value={draftBody}
-          onChange={(e) => setDraftBody(e.target.value)}
-          placeholder="Empieza a escribir…"
+          onBlur={(e) =>
+            autocorrect && setDraftBody(correctSpanishText(e.target.value))
+          }
+          onChange={(e) =>
+            setDraftBody(
+              autocorrect ? autocorrectInputElement(e.target) : e.target.value
+            )
+          }
+          placeholder={t("Empieza a escribir…")}
           spellCheck={false}
           className="flex-1 resize-none bg-transparent outline-none border-none px-4 pb-4 pt-1 leading-[1.55] text-[color:var(--sat-ink)]"
           style={{ fontSize: FONT_SIZE_PX[size] }}
@@ -203,7 +229,7 @@ export function QuickNoteSatellite({ sat }: { sat: BuiltInSatellite }) {
                   onClick={handleNew}
                   className="text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--sat-muted)] hover:text-[color:var(--sat-ink)] font-mono inline-flex items-center gap-1"
                 >
-                  <Plus size={11} /> nueva
+                  <Plus size={11} /> {t("nueva")}
                 </button>
               </div>
               <div className="sat-inset flex items-center gap-1.5 mx-1 mb-1 px-2 py-1 rounded-lg">
@@ -215,7 +241,7 @@ export function QuickNoteSatellite({ sat }: { sat: BuiltInSatellite }) {
                 <input
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Buscar…"
+                  placeholder={t("Buscar…")}
                   className="flex-1 bg-transparent outline-none text-[11.5px] text-[color:var(--sat-ink)] placeholder:text-[color:var(--sat-faint)]"
                 />
               </div>
@@ -229,7 +255,7 @@ export function QuickNoteSatellite({ sat }: { sat: BuiltInSatellite }) {
                       className={`group relative ${
                         locked ? "opacity-40 pointer-events-none" : ""
                       }`}
-                      title={locked ? "Abierta en otra ventana" : undefined}
+                      title={locked ? t("Abierta en otra ventana") : undefined}
                     >
                       <button
                         onClick={locked ? undefined : () => setActive(n.id)}
@@ -248,7 +274,7 @@ export function QuickNoteSatellite({ sat }: { sat: BuiltInSatellite }) {
                           className="shrink-0 opacity-70"
                         />
                         <span className="flex-1 truncate text-[12.5px]">
-                          {n.title.trim() || "Sin título"}
+                          {n.title.trim() || t("Sin título")}
                         </span>
                         <span className="text-[10px] font-mono text-[color:var(--sat-faint)] shrink-0">
                           {relativeTime(n.updatedAt)}
@@ -261,7 +287,7 @@ export function QuickNoteSatellite({ sat }: { sat: BuiltInSatellite }) {
                             handleDelete(n.id);
                           }}
                           className="absolute right-1.5 top-1/2 -translate-y-1/2 sat-icon-btn opacity-0 group-hover:opacity-100"
-                          title="Eliminar"
+                          title={t("Eliminar")}
                         >
                           <Trash2 size={11} strokeWidth={1.6} />
                         </button>

@@ -3,6 +3,7 @@
 import { Trash2 } from "lucide-react";
 
 import { SatelliteShell } from "./SatelliteShell";
+import { t } from "@/lib/i18n";
 import { useStore } from "@/lib/store";
 import {
   CUSTOM_SATELLITE_COLORS,
@@ -46,19 +47,21 @@ export function CustomSatelliteCard({ sat }: { sat: CustomSatellite }) {
             <CustomSatelliteIcon icon={customType.icon} size={13} />
           </span>
           <button
-            aria-label={`Eliminar ${customType.name}`}
+            aria-label={t("Eliminar {name}", { name: customType.name })}
             className="sat-icon-btn"
             onClick={() => {
               if (
                 window.confirm(
-                  "¿Eliminar permanentemente esta instancia y todos sus datos?"
+                  t(
+                    "¿Eliminar permanentemente esta instancia y todos sus datos?"
+                  )
                 )
               ) {
                 void deleteCustomSatellite(sat.id);
               }
             }}
             onPointerDown={(event) => event.stopPropagation()}
-            title="Eliminar Satellite"
+            title={t("Eliminar Satellite")}
             type="button"
           >
             <Trash2 size={12} strokeWidth={1.7} />

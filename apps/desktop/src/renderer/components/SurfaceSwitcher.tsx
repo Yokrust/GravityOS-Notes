@@ -2,6 +2,7 @@ import { BookOpenText, MessageCircle } from "lucide-react";
 import type { ReactNode } from "react";
 
 import type { AppSurface } from "../lib/app-surface.js";
+import { t } from "../lib/i18n.js";
 
 export function SurfaceSwitcher({
   activeSurface,
@@ -11,7 +12,7 @@ export function SurfaceSwitcher({
   onSelectSurface: (surface: AppSurface) => void;
 }) {
   return (
-    <nav aria-label="Superficies" className="surface-switcher">
+    <nav aria-label={t("Superficies")} className="surface-switcher">
       <SurfaceButton
         active={activeSurface === "threads"}
         icon={<MessageCircle size={16} />}

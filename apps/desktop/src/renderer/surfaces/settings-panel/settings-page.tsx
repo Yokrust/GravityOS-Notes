@@ -1,7 +1,9 @@
 import { useState } from "react";
 import {
   Bell,
+  Check,
   Cpu,
+  Languages,
   Mail,
   RotateCcw,
   SlidersHorizontal,
@@ -14,6 +16,13 @@ import { ThemePicker } from "../../components/ThemePicker.js";
 import { useAuthState } from "../../composition/use-auth-state.js";
 import type { AppearancePreferencesController } from "../../composition/use-appearance-preferences.js";
 import type { AppSurface } from "../../lib/app-surface.js";
+import {
+  getLanguage,
+  LANGUAGES,
+  setLanguage,
+  t,
+  type Language
+} from "../../lib/i18n.js";
 
 type SettingsSectionId =
   | "api-provider"
@@ -32,39 +41,39 @@ interface SettingsSection {
 
 const SECTIONS: SettingsSection[] = [
   {
-    description: "Conecta los modelos que usará Gravity.",
+    description: t("Conecta los modelos que usará Gravity."),
     icon: Cpu,
     id: "api-provider",
-    label: "Api provider",
-    status: "Disponible"
+    label: t("Api provider"),
+    status: t("Disponible")
   },
   {
-    description: "Personaliza cómo se siente y se comporta Gravity.",
+    description: t("Personaliza cómo se siente y se comporta Gravity."),
     icon: SlidersHorizontal,
     id: "features",
     label: "Features",
-    status: "Disponible"
+    status: t("Disponible")
   },
   {
-    description: "Elige cómo Gravity llama tu atención.",
+    description: t("Elige cómo Gravity llama tu atención."),
     icon: Bell,
     id: "notifications",
     label: "Notifications",
-    status: "Próximamente"
+    status: t("Próximamente")
   },
   {
-    description: "Configura cuentas y entrega de correo.",
+    description: t("Configura cuentas y entrega de correo."),
     icon: Mail,
     id: "mail",
     label: "Mail",
-    status: "Próximamente"
+    status: t("Próximamente")
   },
   {
-    description: "Administra espacios compartidos y miembros.",
+    description: t("Administra espacios compartidos y miembros."),
     icon: Users,
     id: "teams",
     label: "Teams",
-    status: "Próximamente"
+    status: t("Próximamente")
   }
 ];
 
@@ -94,11 +103,11 @@ export function SettingsPage({
           />
         </div>
         <div className="settings-sidebar-heading">
-          <span>Configuración</span>
+          <span>{t("Configuración")}</span>
           <strong>Gravity</strong>
         </div>
         <nav
-          aria-label="Secciones de configuración"
+          aria-label={t("Secciones de configuración")}
           className="settings-nav scroll-thin"
         >
           {SECTIONS.map((entry, index) => {
@@ -158,11 +167,13 @@ function FeaturesSettings({
         <header className="appearance-theme-heading">
           <div>
             <span>Appearance</span>
-            <h2>Ambiente</h2>
+            <h2>{t("Ambiente")}</h2>
           </div>
           <div>
             <span className="appearance-save-state">
-              {appearance.isHydrated ? "Guardado en este equipo" : "Cargando"}
+              {appearance.isHydrated
+                ? t("Guardado en este equipo")
+                : t("Cargando")}
             </span>
             <button
               className="appearance-reset-button"
@@ -173,13 +184,14 @@ function FeaturesSettings({
               type="button"
             >
               <RotateCcw size={13} />
-              Restaurar
+              {t("Restaurar")}
             </button>
           </div>
         </header>
         <p className="appearance-theme-description">
-          Crea una paleta armónica o mueve cada color libremente. Los cambios se
-          aplican en vivo a Gravity y se conservan al reiniciar la aplicación.
+          {t(
+            "Crea una paleta armónica o mueve cada color libremente. Los cambios se aplican en vivo a Gravity y se conservan al reiniciar la aplicación."
+          )}
         </p>
         {appearance.isHydrated ? (
           <ThemePicker
@@ -192,13 +204,71 @@ function FeaturesSettings({
           />
         ) : (
           <div className="appearance-loading">
-            <strong>Cargando ambiente</strong>
-            <span>Gravity está recuperando tus preferencias guardadas.</span>
+            <strong>{t("Cargando ambiente")}</strong>
+            <span>
+              {t("Gravity está recuperando tus preferencias guardadas.")}
+            </span>
           </div>
         )}
       </section>
+
+      <LanguageSettings />
     </div>
   );
+}
+
+function LanguageSettings() {
+  const active = getLanguage();
+  return (
+    <section className="appearance-theme-card language-card">
+      <header className="appearance-theme-heading">
+        <div>
+          <span>Appearance</span>
+          <h2>{t("Idioma")}</h2>
+        </div>
+      </header>
+      <p className="appearance-theme-description">
+        {t("Elige el idioma de toda la aplicación.")}{" "}
+        {t("La aplicación se reiniciará para aplicar el idioma.")}
+      </p>
+      <div
+        className="language-options"
+        role="radiogroup"
+        aria-label={t("Idioma")}
+      >
+        {LANGUAGES.map(({ id, label }) => {
+          const isActive = id === active;
+          return (
+            <button
+              aria-checked={isActive}
+              className={`language-option ${isActive ? "is-active" : ""}`}
+              key={id}
+              onClick={() => selectAppLanguage(id)}
+              role="radio"
+              type="button"
+            >
+              <span className="language-option-flag" aria-hidden="true">
+                <Languages size={15} strokeWidth={1.7} />
+              </span>
+              <span className="language-option-label">{label}</span>
+              {isActive ? <Check size={15} strokeWidth={2} /> : null}
+            </button>
+          );
+        })}
+      </div>
+      <p className="language-hint">
+        {t(
+          "En español, Gravity corrige automáticamente los acentos mientras escribes tus notas."
+        )}
+      </p>
+    </section>
+  );
+}
+
+function selectAppLanguage(next: Language) {
+  // Persisting reloads the renderer so every surface re-renders in the chosen
+  // language at once.
+  setLanguage(next);
 }
 
 function ProviderSettings() {
@@ -225,10 +295,12 @@ function ProviderSettings() {
       <div className="settings-state-card">
         <span className="settings-card-number">01</span>
         <div>
-          <strong>Cargando proveedores</strong>
+          <strong>{t("Cargando proveedores")}</strong>
           <p>
             {error ??
-              "Gravity está consultando las conexiones disponibles en este equipo."}
+              t(
+                "Gravity está consultando las conexiones disponibles en este equipo."
+              )}
           </p>
         </div>
       </div>
@@ -243,17 +315,17 @@ function ProviderSettings() {
         <section className="oauth-flow-card">
           <div className="provider-card-heading">
             <div>
-              <span>Inicio de sesión</span>
+              <span>{t("Inicio de sesión")}</span>
               <h2>{state.activeFlow.providerName}</h2>
             </div>
-            <span className="provider-status">En curso</span>
+            <span className="provider-status">{t("En curso")}</span>
           </div>
           {state.activeFlow.instructions ? (
             <p>{state.activeFlow.instructions}</p>
           ) : null}
           {state.activeFlow.authUrl ? (
             <a href={state.activeFlow.authUrl} rel="noreferrer" target="_blank">
-              Abrir autorización
+              {t("Abrir autorización")}
             </a>
           ) : null}
           {state.activeFlow.progressMessage ? (
@@ -285,7 +357,7 @@ function ProviderSettings() {
                   required={!state.activeFlow.prompt.allowEmpty}
                   value={flowInput}
                 />
-                <button type="submit">Continuar</button>
+                <button type="submit">{t("Continuar")}</button>
               </div>
             </form>
           ) : null}
@@ -310,7 +382,9 @@ function ProviderSettings() {
                     provider.status.configured ? "is-configured" : ""
                   }`}
                 >
-                  {provider.status.configured ? "Conectado" : "Sin configurar"}
+                  {provider.status.configured
+                    ? t("Conectado")
+                    : t("Sin configurar")}
                 </span>
               </div>
               {provider.status.label ? (
@@ -348,13 +422,13 @@ function ProviderSettings() {
                           [provider.providerId]: event.target.value
                         }))
                       }
-                      placeholder="Pega una nueva clave"
+                      placeholder={t("Pega una nueva clave")}
                       required
                       type="password"
                       value={draft}
                     />
                     <button disabled={busy} type="submit">
-                      Guardar
+                      {t("Guardar")}
                     </button>
                   </div>
                 </form>
@@ -370,7 +444,7 @@ function ProviderSettings() {
                     }}
                     type="button"
                   >
-                    Conectar con OAuth
+                    {t("Conectar con OAuth")}
                   </button>
                 ) : null}
                 {provider.status.configured ? (
@@ -384,7 +458,7 @@ function ProviderSettings() {
                     }}
                     type="button"
                   >
-                    Desconectar
+                    {t("Desconectar")}
                   </button>
                 ) : null}
               </div>
@@ -400,12 +474,13 @@ function ComingSoonSection({ section }: { section: SettingsSection }) {
   const Icon = section.icon;
   return (
     <section className="coming-soon-card">
-      <span className="coming-soon-index">En preparación</span>
+      <span className="coming-soon-index">{t("En preparación")}</span>
       <Icon size={34} strokeWidth={1.25} />
       <h2>{section.label}</h2>
       <p>
-        Esta sección ya tiene un lugar estable en Configuración. Sus controles
-        se habilitarán cuando la capacidad esté disponible.
+        {t(
+          "Esta sección ya tiene un lugar estable en Configuración. Sus controles se habilitarán cuando la capacidad esté disponible."
+        )}
       </p>
     </section>
   );

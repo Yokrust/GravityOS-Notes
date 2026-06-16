@@ -25,6 +25,7 @@ import {
 
 import { SurfaceSwitcher } from "../../components/SurfaceSwitcher.js";
 import type { AppSurface } from "../../lib/app-surface.js";
+import { t } from "../../lib/i18n.js";
 import {
   ASSET_DND_MIME,
   isDraggableMediaKind,
@@ -118,7 +119,7 @@ export function EditableNodeName({
       <span
         className="note-tree-name"
         onDoubleClick={beginEditing}
-        title="Doble clic para cambiar el nombre"
+        title={t("Doble clic para cambiar el nombre")}
       >
         {name}
       </span>
@@ -127,7 +128,7 @@ export function EditableNodeName({
 
   return (
     <input
-      aria-label={`Cambiar nombre de ${name}`}
+      aria-label={t("Cambiar nombre de {name}", { name })}
       className="note-tree-name-input"
       onBlur={commitEditing}
       onChange={(event) => setDraft(event.target.value)}
@@ -199,7 +200,7 @@ function NodeItem({ depth, node }: { node: FileNode; depth: number }) {
                 event.stopPropagation();
                 addNote(node.id);
               }}
-              title="Nueva nota aquí"
+              title={t("Nueva nota aquí")}
               type="button"
             >
               <Plus size={11} />
@@ -210,7 +211,7 @@ function NodeItem({ depth, node }: { node: FileNode; depth: number }) {
                 event.stopPropagation();
                 addFolder(node.id);
               }}
-              title="Nueva carpeta aquí"
+              title={t("Nueva carpeta aquí")}
               type="button"
             >
               <FolderPlus size={11} />
@@ -221,13 +222,15 @@ function NodeItem({ depth, node }: { node: FileNode; depth: number }) {
                 event.stopPropagation();
                 if (
                   window.confirm(
-                    `¿Eliminar la carpeta "${node.name}" y todo su contenido?`
+                    t('¿Eliminar la carpeta "{name}" y todo su contenido?', {
+                      name: node.name
+                    })
                   )
                 ) {
                   deleteNode(node.id);
                 }
               }}
-              title="Eliminar carpeta"
+              title={t("Eliminar carpeta")}
               type="button"
             >
               <Trash2 size={11} />
@@ -280,7 +283,7 @@ function NodeItem({ depth, node }: { node: FileNode; depth: number }) {
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
         style={{ paddingLeft: 36 + depth * 16 }}
-        title={draggable ? "Arrastra a una nota para añadirlo" : node.name}
+        title={draggable ? t("Arrastra a una nota para añadirlo") : node.name}
       >
         <AssetIcon mediaKind={mediaKind} />
         <span className="note-tree-name">{node.name}</span>
@@ -289,11 +292,13 @@ function NodeItem({ depth, node }: { node: FileNode; depth: number }) {
             className="note-tree-icon-button"
             onClick={(event) => {
               event.stopPropagation();
-              if (window.confirm(`¿Eliminar "${node.name}"?`)) {
+              if (
+                window.confirm(t('¿Eliminar "{name}"?', { name: node.name }))
+              ) {
                 deleteNode(node.id);
               }
             }}
-            title="Eliminar"
+            title={t("Eliminar")}
             type="button"
           >
             <Trash2 size={11} />
@@ -331,11 +336,15 @@ function NodeItem({ depth, node }: { node: FileNode; depth: number }) {
           className="note-tree-icon-button"
           onClick={(event) => {
             event.stopPropagation();
-            if (window.confirm(`¿Eliminar la nota "${node.name}"?`)) {
+            if (
+              window.confirm(
+                t('¿Eliminar la nota "{name}"?', { name: node.name })
+              )
+            ) {
               deleteNode(node.id);
             }
           }}
-          title="Eliminar"
+          title={t("Eliminar")}
           type="button"
         >
           <Trash2 size={11} />
@@ -375,14 +384,14 @@ export function NotesSidebar({
   const noteCount = countNotes(tree);
 
   return (
-    <aside aria-label="Árbol de notas" className="notes-sidebar">
+    <aside aria-label={t("Árbol de notas")} className="notes-sidebar">
       <div className="notes-sidebar-navigation">
         <SurfaceSwitcher
           activeSurface={activeSurface}
           onSelectSurface={onSelectSurface}
         />
         <button
-          aria-label="Cerrar navegación"
+          aria-label={t("Cerrar navegación")}
           className="sidebar-close-button"
           onClick={toggleSidebar}
           type="button"
@@ -394,9 +403,9 @@ export function NotesSidebar({
       <div className="notebook-panel">
         <div className="notebook-heading">
           <div>
-            <div className="notebook-label">Cuaderno</div>
+            <div className="notebook-label">{t("Cuaderno")}</div>
             <div className="notebook-title" title={notebookRoot ?? undefined}>
-              {notebookName ?? "Sin carpeta"}
+              {notebookName ?? t("Sin carpeta")}
             </div>
           </div>
           <div className="notebook-count">
@@ -411,12 +420,12 @@ export function NotesSidebar({
               onClick={() => addNote()}
               type="button"
             >
-              <Plus size={13} /> <span>Nueva nota</span>
+              <Plus size={13} /> <span>{t("Nueva nota")}</span>
             </button>
             <button
               className="new-folder-button"
               onClick={() => addFolder()}
-              title="Nueva carpeta"
+              title={t("Nueva carpeta")}
               type="button"
             >
               <Folder size={13} />
@@ -429,21 +438,21 @@ export function NotesSidebar({
             type="button"
           >
             <FolderCog size={14} />
-            Elegir carpeta
+            {t("Elegir carpeta")}
           </button>
         )}
 
         <div className="note-tree scroll-thin">
           <div className="note-tree-header">
-            <div className="note-tree-label">Archivos</div>
+            <div className="note-tree-label">{t("Archivos")}</div>
             {notebookRoot ? (
               <div className="note-tree-header-actions">
                 <button
-                  aria-label="Recargar árbol"
+                  aria-label={t("Recargar árbol")}
                   className="note-tree-icon-button"
                   disabled={notesLoading}
                   onClick={refreshNotebook}
-                  title="Recargar cambios del disco"
+                  title={t("Recargar cambios del disco")}
                   type="button"
                 >
                   <RefreshCw
@@ -452,10 +461,10 @@ export function NotesSidebar({
                   />
                 </button>
                 <button
-                  aria-label="Cambiar carpeta"
+                  aria-label={t("Cambiar carpeta")}
                   className="note-tree-icon-button"
                   onClick={chooseNotebookRoot}
-                  title="Cambiar carpeta del cuaderno"
+                  title={t("Cambiar carpeta del cuaderno")}
                   type="button"
                 >
                   <FolderCog size={12} />
@@ -469,12 +478,12 @@ export function NotesSidebar({
           ) : null}
           {notebookStatus && notebookStatus !== "ready" ? (
             <div className="notebook-message">
-              La carpeta del cuaderno no está disponible.
+              {t("La carpeta del cuaderno no está disponible.")}
             </div>
           ) : null}
           {notebookRoot && !notesLoading && tree.length === 0 ? (
             <div className="notebook-message">
-              Esta carpeta todavía no contiene notas Markdown.
+              {t("Esta carpeta todavía no contiene notas Markdown.")}
             </div>
           ) : null}
           {tree.map((node) => (

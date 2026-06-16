@@ -5,6 +5,12 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   resolve: {
     alias: {
+      // Mirror the renderer's `@/*` path alias
+      // (apps/desktop/tsconfig.renderer.json) so component tests resolve
+      // renderer imports the same way the Vite app build does.
+      "@": fileURLToPath(
+        new URL("./apps/desktop/src/renderer", import.meta.url)
+      ),
       "@gravity/application/appearance": fileURLToPath(
         new URL(
           "./packages/application/src/services/appearance/appearance-preferences-service.ts",

@@ -5,3 +5,6 @@ node_modules
 .pnpm-store
 playwright-report
 test-results
+
+# Generated Spanish accent lexicon (one giant string literal — not for tooling)
+apps/desktop/src/renderer/lib/spanish-accents-data.ts

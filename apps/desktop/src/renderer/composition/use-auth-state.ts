@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { t } from "../lib/i18n.js";
+
 export function useAuthState() {
   const [state, setState] = useState<AuthStateRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -7,7 +9,7 @@ export function useAuthState() {
   const refresh = useCallback(async () => {
     if (!window.gravity) {
       setError(
-        "Los proveedores solo están disponibles en la app de escritorio."
+        t("Los proveedores solo están disponibles en la app de escritorio.")
       );
       return null;
     }
@@ -27,7 +29,7 @@ export function useAuthState() {
   useEffect(() => {
     if (!window.gravity) {
       setError(
-        "Los proveedores solo están disponibles en la app de escritorio."
+        t("Los proveedores solo están disponibles en la app de escritorio.")
       );
       return;
     }

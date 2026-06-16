@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { Pause, Play, RotateCcw, Timer } from "lucide-react";
 import { SatelliteShell } from "./SatelliteShell";
+import { t } from "@/lib/i18n";
 import { useStore } from "@/lib/store";
 import { POMODORO_DURATIONS } from "@/lib/pomodoro-timer";
 import type { BuiltInSatellite } from "@/lib/types";
@@ -27,10 +28,10 @@ export function PomodoroSatellite({ sat }: { sat: BuiltInSatellite }) {
 
   const totalLabel =
     mode === "focus"
-      ? "Foco · 25:00"
+      ? t("Foco · 25:00")
       : mode === "short-break"
-        ? "Descanso · 05:00"
-        : "Descanso largo · 15:00";
+        ? t("Descanso · 05:00")
+        : t("Descanso largo · 15:00");
 
   const running = status === "running";
   const isBreak = mode !== "focus";
@@ -46,9 +47,11 @@ export function PomodoroSatellite({ sat }: { sat: BuiltInSatellite }) {
       }
       footerSlot={
         <>
-          <span className="uppercase tracking-[0.18em]">{cycles} ciclos</span>
+          <span className="uppercase tracking-[0.18em]">
+            {t("{count} ciclos", { count: cycles })}
+          </span>
           <span className="uppercase tracking-[0.18em] opacity-60">
-            {breaks} descansos
+            {t("{count} descansos", { count: breaks })}
           </span>
         </>
       }
@@ -76,7 +79,7 @@ export function PomodoroSatellite({ sat }: { sat: BuiltInSatellite }) {
                 />
               )}
               <span className="relative">
-                {m === "focus" ? "Foco" : "Descanso"}
+                {m === "focus" ? t("Foco") : t("Descanso")}
               </span>
             </button>
           ))}
@@ -112,10 +115,10 @@ export function PomodoroSatellite({ sat }: { sat: BuiltInSatellite }) {
             </div>
             <div className="text-[9.5px] uppercase tracking-[0.22em] text-[color:var(--sat-faint)] mt-1">
               {mode === "focus"
-                ? "Foco"
+                ? t("Foco")
                 : mode === "short-break"
-                  ? "Descanso"
-                  : "Descanso largo"}
+                  ? t("Descanso")
+                  : t("Descanso largo")}
             </div>
           </div>
         </div>
