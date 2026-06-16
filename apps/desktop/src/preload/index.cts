@@ -68,7 +68,8 @@ interface NoteTreeNode {
   id: string;
   name: string;
   path: string;
-  type: "folder" | "note";
+  type: "folder" | "note" | "asset";
+  mediaKind?: "image" | "video" | "audio" | "text" | "file";
   children?: NoteTreeNode[];
   updatedAt?: number;
 }
@@ -443,6 +444,18 @@ contextBridge.exposeInMainWorld("gravity", {
     ipcRenderer.invoke("notes:import-image-url", notePath, source) as Promise<{
       alt: string;
       source: string;
+    }>,
+  importNotebookImagePath: async (notePath: string, sourcePath: string) =>
+    ipcRenderer.invoke(
+      "notes:import-image-path",
+      notePath,
+      sourcePath
+    ) as Promise<{ alt: string; source: string }>,
+  readNotebookTextAsset: async (assetPath: string) =>
+    ipcRenderer.invoke("notes:read-text-asset", assetPath) as Promise<{
+      content: string;
+      name: string;
+      path: string;
     }>,
   createNotebookNote: async (parentPath?: string) =>
     ipcRenderer.invoke(

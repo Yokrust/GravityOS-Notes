@@ -24,7 +24,7 @@ describe("notes service", () => {
     });
   });
 
-  it("builds a sorted note tree from folders and markdown files", async () => {
+  it("builds a sorted note tree from folders, notes, and assets", async () => {
     const filesystem = createStubFilesystem([]);
     await filesystem.createDirectory("/Downloads/Notes");
     await filesystem.createDirectory("/Downloads/Notes/Personal");
@@ -69,9 +69,41 @@ describe("notes service", () => {
           name: "Today",
           path: "/Downloads/Notes/Today.md",
           type: "note"
+        },
+        {
+          mediaKind: "image",
+          name: "image.png",
+          path: "/Downloads/Notes/image.png",
+          type: "asset"
         }
       ]
     });
+  });
+
+  it("reads a dragged text asset's content verbatim", async () => {
+    const filesystem = createStubFilesystem([]);
+    await filesystem.createDirectory("/Notes");
+    await filesystem.writeFile("/Notes/quote.txt", "  line one\n\nline two  ");
+    const service = new NotesService(filesystem, createInMemoryPersistence());
+    await service.attach("/Notes");
+
+    await expect(service.readTextAsset("/Notes/quote.txt")).resolves.toEqual({
+      content: "  line one\n\nline two  ",
+      name: "quote.txt",
+      path: "/Notes/quote.txt"
+    });
+  });
+
+  it("rejects reading text assets outside the notebook root", async () => {
+    const filesystem = createStubFilesystem([]);
+    await filesystem.createDirectory("/Notes");
+    await filesystem.writeFile("/outside.txt", "secret");
+    const service = new NotesService(filesystem, createInMemoryPersistence());
+    await service.attach("/Notes");
+
+    await expect(service.readTextAsset("/outside.txt")).rejects.toThrow(
+      "outside the Notebook Root"
+    );
   });
 
   it("creates, saves, renames, and deletes markdown notes on disk", async () => {

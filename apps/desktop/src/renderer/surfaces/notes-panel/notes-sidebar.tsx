@@ -1,10 +1,14 @@
 import {
   ChevronRight,
+  File,
   FileText,
+  Film,
   Folder,
   FolderCog,
   FolderPlus,
   FolderOpen,
+  Image,
+  Music,
   Plus,
   RefreshCw,
   Trash2,
@@ -21,8 +25,23 @@ import {
 
 import { SurfaceSwitcher } from "../../components/SurfaceSwitcher.js";
 import type { AppSurface } from "../../lib/app-surface.js";
+import {
+  ASSET_DND_MIME,
+  isDraggableMediaKind,
+  type AssetDragPayload,
+  type MediaKind
+} from "../../lib/media-kind.js";
 import { useStore } from "../../lib/store.js";
 import type { FileNode } from "../../lib/types.js";
+
+function AssetIcon({ mediaKind }: { mediaKind: MediaKind }) {
+  if (mediaKind === "image") return <Image className="opacity-60" size={12} />;
+  if (mediaKind === "video") return <Film className="opacity-60" size={12} />;
+  if (mediaKind === "audio") return <Music className="opacity-60" size={12} />;
+  if (mediaKind === "text")
+    return <FileText className="opacity-60" size={12} />;
+  return <File className="opacity-60" size={12} />;
+}
 
 export function normalizeInlineNodeName(value: string): string | null {
   const normalized = value.trim();
@@ -230,6 +249,56 @@ function NodeItem({ depth, node }: { node: FileNode; depth: number }) {
             </motion.div>
           ) : null}
         </AnimatePresence>
+      </div>
+    );
+  }
+
+  if (node.type === "asset") {
+    const mediaKind: MediaKind = node.mediaKind ?? "file";
+    const draggable = isDraggableMediaKind(mediaKind);
+    return (
+      <div
+        className="note-tree-asset"
+        draggable={draggable}
+        onDragStart={
+          draggable
+            ? (event) => {
+                const payload: AssetDragPayload = {
+                  mediaKind,
+                  name: node.name,
+                  path: node.path
+                };
+                event.dataTransfer.setData(
+                  ASSET_DND_MIME,
+                  JSON.stringify(payload)
+                );
+                event.dataTransfer.setData("text/plain", node.name);
+                event.dataTransfer.effectAllowed = "copy";
+              }
+            : undefined
+        }
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        style={{ paddingLeft: 36 + depth * 16 }}
+        title={draggable ? "Arrastra a una nota para añadirlo" : node.name}
+      >
+        <AssetIcon mediaKind={mediaKind} />
+        <span className="note-tree-name">{node.name}</span>
+        {hover ? (
+          <button
+            className="note-tree-icon-button"
+            onClick={(event) => {
+              event.stopPropagation();
+              if (window.confirm(`¿Eliminar "${node.name}"?`)) {
+                deleteNode(node.id);
+              }
+            }}
+            title="Eliminar"
+            type="button"
+          >
+            <Trash2 size={11} />
+          </button>
+        ) : null}
       </div>
     );
   }

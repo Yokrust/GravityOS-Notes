@@ -203,6 +203,7 @@ function cloneNoteTreeNode(node: NoteTreeNodeRecord): FileNode {
     name: node.name,
     path: node.path,
     type: node.type,
+    ...(node.mediaKind ? { mediaKind: node.mediaKind } : {}),
     ...(node.children
       ? { children: node.children.map(cloneNoteTreeNode) }
       : {}),

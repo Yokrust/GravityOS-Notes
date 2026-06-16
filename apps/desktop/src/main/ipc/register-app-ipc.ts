@@ -344,6 +344,14 @@ export function registerAppIpc(): void {
       });
     }
   );
+  ipcMain.handle(
+    "notes:import-image-path",
+    async (_, notePath: string, sourcePath: string) =>
+      notes.importImage(notePath, sourcePath)
+  );
+  ipcMain.handle("notes:read-text-asset", async (_, assetPath: string) =>
+    notes.readTextAsset(assetPath)
+  );
   ipcMain.handle("notes:create-note", async (_, parentPath?: string) =>
     notes.createNote(parentPath)
   );

@@ -48,6 +48,8 @@ import {
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
+import { ASSET_DND_MIME, type AssetDragPayload } from "../lib/media-kind.js";
+
 const uid = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -1552,10 +1554,12 @@ const SLASH_OPTIONS: SlashOption[] = [
 ];
 
 export function BlockEditor({
+  importImagePath,
   loadImage,
   onChange,
   onChooseImage,
   onPasteImage,
+  readTextAsset,
   value
 }: {
   value: string;
@@ -1567,6 +1571,12 @@ export function BlockEditor({
   loadImage?: (
     source: string
   ) => Promise<{ bytes: Uint8Array; mimeType: string }>;
+  /** Imports an in-notebook image file (dragged from the sidebar) into the note. */
+  importImagePath?: (
+    sourcePath: string
+  ) => Promise<{ alt: string; source: string }>;
+  /** Reads a dragged in-notebook text file's content (e.g. `.txt`). */
+  readTextAsset?: (assetPath: string) => Promise<string>;
 }) {
   const [blocks, setBlocks] = useState<Block[]>(() => parseMarkdown(value));
   const [focusRequest, setFocusRequest] = useState<{ id: string } | null>(null);
@@ -2142,6 +2152,40 @@ export function BlockEditor({
     []
   );
 
+  // Inserts dragged plain text (a `.txt` asset) as one paragraph per line,
+  // preserving spacing. Mirrors `insertImportedImage`'s targeting rules.
+  const insertTextBlocks = useCallback((id: string, text: string) => {
+    const newBlocks: Block[] = text
+      .replace(/\r\n?/g, "\n")
+      .split("\n")
+      .map((line): Block => ({ id: uid(), text: line, type: "p" }));
+    if (!newBlocks.length) return;
+    setBlocks((current) => {
+      if (!current.length) return current;
+      const requestedIndex = current.findIndex((block) => block.id === id);
+      const targetIndex =
+        requestedIndex < 0 ? current.length - 1 : requestedIndex;
+      const target = current[targetIndex];
+      const replaceTarget =
+        !!target && !isStructuralBlock(target) && !target.text.trim();
+      const insertion = replaceTarget
+        ? [
+            ...current.slice(0, targetIndex),
+            ...newBlocks,
+            ...current.slice(targetIndex + 1)
+          ]
+        : [
+            ...current.slice(0, targetIndex + 1),
+            ...newBlocks,
+            ...current.slice(targetIndex + 1)
+          ];
+      return ensureStructuralWritingBlocks(insertion);
+    });
+    const lastBlock = newBlocks[newBlocks.length - 1];
+    if (lastBlock) setFocusRequest({ id: lastBlock.id });
+    setSlash(null);
+  }, []);
+
   const insertDivider = useCallback((id: string) => {
     const trailingBlock = emptyBlock();
     setBlocks((current) => replaceBlockWithDivider(current, id, trailingBlock));
@@ -2209,22 +2253,53 @@ export function BlockEditor({
 
   const handleEditorDrop = useCallback(
     (event: ReactDragEvent<HTMLDivElement>) => {
-      if (!dataTransferHasImage(event.dataTransfer)) return;
       const targetId =
         document
           .elementFromPoint(event.clientX, event.clientY)
           ?.closest<HTMLElement>("[data-editor-block-id]")?.dataset
           .editorBlockId ?? null;
+
+      // Assets dragged from the notebook sidebar (image -> import & embed,
+      // text -> insert content) carry our custom payload.
+      const assetRaw = event.dataTransfer.getData(ASSET_DND_MIME);
+      if (assetRaw) {
+        event.preventDefault();
+        let payload: AssetDragPayload;
+        try {
+          payload = JSON.parse(assetRaw) as AssetDragPayload;
+        } catch {
+          return;
+        }
+        if (payload.mediaKind === "image" && importImagePath) {
+          void importImagePath(payload.path)
+            .then((image) => insertImportedImage(targetId ?? "", image))
+            .catch(() => undefined);
+        } else if (payload.mediaKind === "text" && readTextAsset) {
+          void readTextAsset(payload.path)
+            .then((text) => insertTextBlocks(targetId ?? "", text))
+            .catch(() => undefined);
+        }
+        return;
+      }
+
+      if (!dataTransferHasImage(event.dataTransfer)) return;
       if (importTransferImage(targetId, event.dataTransfer)) {
         event.preventDefault();
       }
     },
-    [importTransferImage]
+    [
+      importImagePath,
+      importTransferImage,
+      insertImportedImage,
+      insertTextBlocks,
+      readTextAsset
+    ]
   );
 
   const handleEditorDragOver = useCallback(
     (event: ReactDragEvent<HTMLDivElement>) => {
-      if (!dataTransferHasImage(event.dataTransfer)) return;
+      const hasAsset = event.dataTransfer.types.includes(ASSET_DND_MIME);
+      if (!hasAsset && !dataTransferHasImage(event.dataTransfer)) return;
       event.preventDefault();
       event.dataTransfer.dropEffect = "copy";
     },

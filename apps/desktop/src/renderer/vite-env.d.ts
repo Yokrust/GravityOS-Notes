@@ -44,6 +44,13 @@ interface Window {
       notePath: string,
       source: string
     ): Promise<{ alt: string; source: string }>;
+    importNotebookImagePath(
+      notePath: string,
+      sourcePath: string
+    ): Promise<{ alt: string; source: string }>;
+    readNotebookTextAsset(
+      assetPath: string
+    ): Promise<{ content: string; name: string; path: string }>;
     createNotebookNote(parentPath?: string): Promise<NotesStateRecord>;
     createNotebookFolder(parentPath?: string): Promise<NotesStateRecord>;
     renameNotebookNode(
@@ -354,7 +361,8 @@ interface NoteTreeNodeRecord {
   id: string;
   name: string;
   path: string;
-  type: "folder" | "note";
+  type: "folder" | "note" | "asset";
+  mediaKind?: "image" | "video" | "audio" | "text" | "file";
   children?: NoteTreeNodeRecord[];
   updatedAt?: number;
 }

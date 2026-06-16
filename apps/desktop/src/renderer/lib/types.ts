@@ -3,6 +3,7 @@ export type {
   PomodoroStatus,
   PomodoroTimer
 } from "./pomodoro-timer";
+import type { MediaKind } from "./media-kind";
 
 export type NoteId = string;
 
@@ -10,7 +11,9 @@ export interface FileNode {
   id: NoteId;
   name: string;
   path: string;
-  type: "folder" | "note";
+  type: "folder" | "note" | "asset";
+  /** Present only for `asset` nodes; how the file can be embedded in a note. */
+  mediaKind?: MediaKind;
   children?: FileNode[];
   /** Raw markdown-ish content (only for notes) */
   content?: string;

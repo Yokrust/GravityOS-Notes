@@ -176,13 +176,25 @@ export interface PersistedNotesState {
   expandedFolders: Record<string, boolean>;
 }
 
+/** Kind of a non-markdown file surfaced in the notebook tree. */
+export type MediaKind = "image" | "video" | "audio" | "text" | "file";
+
 export interface NoteTreeNode {
   id: string;
   name: string;
   path: string;
-  type: "folder" | "note";
+  type: "folder" | "note" | "asset";
+  /** Present only for `asset` nodes; describes how the file can be embedded. */
+  mediaKind?: MediaKind;
   children?: NoteTreeNode[];
   updatedAt?: number;
+}
+
+/** A non-markdown text file read from the notebook (e.g. a dropped `.txt`). */
+export interface NoteTextAsset {
+  content: string;
+  name: string;
+  path: string;
 }
 
 export interface NoteDocument {

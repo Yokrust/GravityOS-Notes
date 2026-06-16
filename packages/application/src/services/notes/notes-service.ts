@@ -6,11 +6,13 @@ import type {
   NoteImageImport,
   NotesNavigationState,
   NotesState,
+  NoteTextAsset,
   NoteTreeNode,
   PersistedNotesState,
   PersistencePort,
   ProjectPathStatus
 } from "../../contracts/index.js";
+import { classifyMediaKind } from "./media-kind.js";
 
 const MARKDOWN_EXTENSION = ".md";
 const NOTE_ASSET_DIRECTORY = ".gravity-assets";
@@ -211,6 +213,22 @@ export class NotesService {
     return { bytes, mimeType };
   }
 
+  /** Reads a non-image text file (e.g. a `.txt`) from inside the notebook. */
+  async readTextAsset(assetPath: string): Promise<NoteTextAsset> {
+    const preferences = await this.loadPreferences();
+    const notebookRoot = requireNotebookRoot(preferences);
+    this.assertManagedPath(notebookRoot, assetPath);
+    const details = await this.filesystem.inspectPath(assetPath);
+    if (details.status !== "ready" || details.kind !== "file") {
+      throw new Error("The selected file is not available.");
+    }
+    return {
+      content: await this.filesystem.readFile(assetPath),
+      name: this.filesystem.baseName(assetPath),
+      path: assetPath
+    };
+  }
+
   async createNote(parentPath?: string): Promise<NotesState> {
     const preferences = await this.loadPreferences();
     const notebookRoot = requireNotebookRoot(preferences);
@@ -400,16 +418,24 @@ export class NotesService {
           };
         }
 
-        if (!fileName.toLowerCase().endsWith(MARKDOWN_EXTENSION)) {
-          return null;
+        const details = await this.filesystem.inspectPath(entry.path);
+
+        if (fileName.toLowerCase().endsWith(MARKDOWN_EXTENSION)) {
+          return {
+            id: entry.path,
+            name: noteName(fileName),
+            path: entry.path,
+            type: "note",
+            updatedAt: details.modifiedAt ?? 0
+          };
         }
 
-        const details = await this.filesystem.inspectPath(entry.path);
         return {
           id: entry.path,
-          name: noteName(fileName),
+          mediaKind: classifyMediaKind(fileName),
+          name: fileName,
           path: entry.path,
-          type: "note",
+          type: "asset",
           updatedAt: details.modifiedAt ?? 0
         };
       })
@@ -419,7 +445,7 @@ export class NotesService {
       .filter((node): node is NoteTreeNode => node !== null)
       .toSorted(
         (left, right) =>
-          Number(left.type === "note") - Number(right.type === "note") ||
+          treeNodeRank(left) - treeNodeRank(right) ||
           left.name.localeCompare(right.name, undefined, {
             sensitivity: "base"
           })
@@ -578,6 +604,13 @@ function normalizeNodeName(value: string): string {
     throw new Error("Use a valid note or folder name.");
   }
   return trimmed;
+}
+
+/** Sort order within a folder: folders, then notes, then other files. */
+function treeNodeRank(node: NoteTreeNode): number {
+  if (node.type === "folder") return 0;
+  if (node.type === "note") return 1;
+  return 2;
 }
 
 function collectNotePaths(nodes: NoteTreeNode[]): string[] {

@@ -147,6 +147,12 @@ export function NoteEditor() {
             <div className="editor note-editor-content">
               <BlockEditor
                 key={activeNote.id}
+                importImagePath={(sourcePath) =>
+                  window.gravity.importNotebookImagePath(
+                    activeNote.path,
+                    sourcePath
+                  )
+                }
                 loadImage={(source) =>
                   window.gravity.loadNotebookImage(activeNote.path, source)
                 }
@@ -161,6 +167,11 @@ export function NoteEditor() {
                         input.source
                       )
                     : window.gravity.saveNotebookImage(activeNote.path, input)
+                }
+                readTextAsset={(assetPath) =>
+                  window.gravity
+                    .readNotebookTextAsset(assetPath)
+                    .then((asset) => asset.content)
                 }
                 value={content}
               />

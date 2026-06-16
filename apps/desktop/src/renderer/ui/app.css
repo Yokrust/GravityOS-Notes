@@ -1372,7 +1372,8 @@ kbd {
 }
 
 .note-tree-folder,
-.note-tree-note {
+.note-tree-note,
+.note-tree-asset {
   position: relative;
   display: flex;
   min-width: 0;
@@ -1394,8 +1395,17 @@ kbd {
   font-weight: 550;
 }
 
+.note-tree-asset[draggable="true"] {
+  cursor: grab;
+}
+
+.note-tree-asset[draggable="true"]:active {
+  cursor: grabbing;
+}
+
 .note-tree-folder:hover,
-.note-tree-note:hover {
+.note-tree-note:hover,
+.note-tree-asset:hover {
   background: var(--hover-1);
   color: var(--ink);
 }
