@@ -15,6 +15,7 @@ import {
   AppWorkspaceService,
   CustomSatelliteService,
   MapService,
+  NotesScratchpadService,
   NotesService,
   ProjectService,
   RunPanelService,
@@ -25,6 +26,7 @@ import {
   type AppWorkspaceHydrateInput,
   type AppWorkspaceState,
   type NotesNavigationState,
+  type NotesProposedChange,
   type NoteImageImport,
   type ProjectOverview,
   type ProjectState,
@@ -40,22 +42,11 @@ import {
   resolvePersistenceDatabasePath,
   resolvePiAuthStoragePath
 } from "../infrastructure/app-paths.js";
-
-function createSequentialIdGenerator() {
-  const counts = new Map<string, number>();
-
-  return {
-    next(prefix: string) {
-      const nextValue = (counts.get(prefix) ?? 0) + 1;
-      counts.set(prefix, nextValue);
-      return `${prefix}-${nextValue}`;
-    }
-  };
-}
+import { createPrefixedIdGenerator } from "../infrastructure/id-generator.js";
 
 const MAX_NOTE_IMAGE_DOWNLOAD_BYTES = 20 * 1024 * 1024;
 
-const ids = createSequentialIdGenerator();
+const ids = createPrefixedIdGenerator();
 const clock = {
   now() {
     return new Date().toISOString();
@@ -139,22 +130,16 @@ const threadPanel = new ThreadPanelService(
 );
 const projects = new ProjectService(ids, filesystem, maps, persistence);
 const notes = new NotesService(filesystem, persistence);
+const notesScratchpad = new NotesScratchpadService(
+  filesystem,
+  persistence,
+  notes
+);
 const appearancePreferences = new AppearancePreferencesService(persistence);
 
-// Los ids de Satellites custom sobreviven reinicios: el generador secuencial
-// en memoria colisionaría con filas ya persistidas, así que usamos sufijos
-// únicos por marca de tiempo.
-const persistentIds = {
-  next(prefix: string) {
-    const suffix = `${Date.now().toString(36)}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}`;
-    return `${prefix}-${suffix}`;
-  }
-};
 const customSatellites = new CustomSatelliteService(
   clock,
-  persistentIds,
+  ids,
   persistence,
   new PiCustomSatelliteGenerator({ authStorage })
 );
@@ -365,6 +350,17 @@ export function registerAppIpc(): void {
   );
   ipcMain.handle("notes:delete", async (_, nodePath: string) =>
     notes.deleteNode(nodePath)
+  );
+  ipcMain.handle("notes:get-scratchpad", async () => notesScratchpad.hydrate());
+  ipcMain.handle(
+    "notes:stage-scratchpad",
+    async (_, changes: NotesProposedChange[]) => notesScratchpad.stage(changes)
+  );
+  ipcMain.handle("notes:accept-scratchpad", async () =>
+    notesScratchpad.accept()
+  );
+  ipcMain.handle("notes:reject-scratchpad", async () =>
+    notesScratchpad.reject()
   );
   ipcMain.handle(
     "maps:load-draft",

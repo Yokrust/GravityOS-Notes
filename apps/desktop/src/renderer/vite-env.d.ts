@@ -58,6 +58,12 @@ interface Window {
       nextName: string
     ): Promise<NotesStateRecord>;
     deleteNotebookNode(nodePath: string): Promise<NotesStateRecord>;
+    getNotesScratchpad(): Promise<NotesScratchpadStateRecord>;
+    stageNotesScratchpad(
+      changes: NotesProposedChangeRecord[]
+    ): Promise<NotesScratchpadStateRecord>;
+    acceptNotesScratchpad(): Promise<NotesScratchpadApplyResultRecord>;
+    rejectNotesScratchpad(): Promise<NotesScratchpadStateRecord>;
     loadMapDraft(
       projectId: string,
       rootPath: string,
@@ -388,6 +394,66 @@ interface NoteDocumentRecord {
 interface NotesNavigationState {
   activeNoteId: string | null;
   expandedFolders: Record<string, boolean>;
+}
+
+type NotesProposedChangeRecord =
+  | {
+      content: string;
+      id: string;
+      path: string;
+      type: "createNote";
+    }
+  | {
+      content: string;
+      id: string;
+      path: string;
+      type: "editNote";
+    }
+  | {
+      content: string;
+      id: string;
+      path: string;
+      type: "appendNote";
+    }
+  | {
+      id: string;
+      nextName: string;
+      path: string;
+      type: "renameNode";
+    }
+  | {
+      id: string;
+      path: string;
+      targetFolderPath: string;
+      type: "moveNote";
+    }
+  | {
+      id: string;
+      path: string;
+      type: "deleteNote";
+    }
+  | {
+      id: string;
+      path: string;
+      type: "createFolder";
+    };
+
+interface NotesScratchpadChangePreviewRecord {
+  afterContent?: string;
+  afterPath?: string;
+  beforeContent?: string;
+  beforePath?: string;
+  change: NotesProposedChangeRecord;
+}
+
+interface NotesScratchpadStateRecord {
+  changes: NotesScratchpadChangePreviewRecord[];
+  isOpen: boolean;
+}
+
+interface NotesScratchpadApplyResultRecord {
+  notes: NotesStateRecord;
+  scratchpad: NotesScratchpadStateRecord;
 }
 
 interface RunRecord {

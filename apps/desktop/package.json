@@ -15,7 +15,8 @@
     "build:preload": "tsc -b --force tsconfig.preload.json",
     "build:renderer": "vite build",
     "clean": "rimraf dist dist-electron",
-    "test:e2e": "run-s build test:e2e:run",
+    "test:e2e": "run-s build test:e2e:rebuild-native test:e2e:run",
+    "test:e2e:rebuild-native": "corepack pnpm --workspace-root rebuild:native",
     "test:e2e:run": "playwright test --config tests/e2e/playwright.config.ts"
   },
   "dependencies": {

@@ -11,6 +11,9 @@ import {
   createRunThread,
   createThreadMessage,
   deriveThreadTitleFromPrompt,
+  parseNoteLinks,
+  resolveNoteLinks,
+  rewriteNoteLinksForRename,
   startRun,
   updateCustomSatelliteInstanceValue,
   updateRunResult
@@ -125,6 +128,67 @@ describe("custom satellite field semantics", () => {
 });
 
 describe("domain bootstrap", () => {
+  it("parses and resolves Note Links by title", () => {
+    const content = "See [[Project Plan]] and [[Missing Note]].";
+
+    expect(parseNoteLinks(content)).toEqual([
+      {
+        end: 20,
+        start: 4,
+        title: "Project Plan"
+      },
+      {
+        end: 41,
+        start: 25,
+        title: "Missing Note"
+      }
+    ]);
+    expect(
+      resolveNoteLinks(content, [
+        {
+          path: "/Notes/Project Plan.md",
+          title: "Project Plan"
+        }
+      ])
+    ).toMatchObject([
+      {
+        status: "resolved",
+        targetPath: "/Notes/Project Plan.md",
+        title: "Project Plan"
+      },
+      {
+        status: "broken",
+        targetPath: null,
+        title: "Missing Note"
+      }
+    ]);
+  });
+
+  it("rewrites Note Links when a target Note is renamed", () => {
+    expect(
+      rewriteNoteLinksForRename({
+        content: "[[Project Plan]] links to [[Other]] and [[ project plan ]].",
+        fromTitle: "Project Plan",
+        toTitle: "Roadmap"
+      })
+    ).toBe("[[Roadmap]] links to [[Other]] and [[Roadmap]].");
+  });
+
+  it("treats duplicate Note Link targets as ambiguous", () => {
+    expect(
+      resolveNoteLinks("[[Ideas]]", [
+        { path: "/Notes/Ideas.md", title: "Ideas" },
+        { path: "/Notes/Archive/Ideas.md", title: "Ideas" }
+      ])
+    ).toMatchObject([
+      {
+        status: "ambiguous",
+        targetPath: null,
+        title: "Ideas"
+      }
+    ]);
+  });
+
   it("creates a folder system without requiring role assignments", () => {
     const project = createProject({
       id: "fs-1",

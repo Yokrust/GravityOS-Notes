@@ -233,6 +233,66 @@ export interface NotesNavigationState {
   expandedFolders: Record<string, boolean>;
 }
 
+export type NotesProposedChange =
+  | {
+      content: string;
+      id: string;
+      path: string;
+      type: "createNote";
+    }
+  | {
+      content: string;
+      id: string;
+      path: string;
+      type: "editNote";
+    }
+  | {
+      content: string;
+      id: string;
+      path: string;
+      type: "appendNote";
+    }
+  | {
+      id: string;
+      nextName: string;
+      path: string;
+      type: "renameNode";
+    }
+  | {
+      id: string;
+      path: string;
+      targetFolderPath: string;
+      type: "moveNote";
+    }
+  | {
+      id: string;
+      path: string;
+      type: "deleteNote";
+    }
+  | {
+      id: string;
+      path: string;
+      type: "createFolder";
+    };
+
+export interface NotesScratchpadChangePreview {
+  afterContent?: string;
+  afterPath?: string;
+  beforeContent?: string;
+  beforePath?: string;
+  change: NotesProposedChange;
+}
+
+export interface NotesScratchpadState {
+  changes: NotesScratchpadChangePreview[];
+  isOpen: boolean;
+}
+
+export interface NotesScratchpadApplyResult {
+  notes: NotesState;
+  scratchpad: NotesScratchpadState;
+}
+
 export interface AppMetadata {
   selectedProjectId: string | null;
   notesState?: PersistedNotesState | null;

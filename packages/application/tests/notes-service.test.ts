@@ -130,6 +130,34 @@ describe("notes service", () => {
     await expect(filesystem.readFile("/Notes/Mi nota.md")).rejects.toThrow();
   });
 
+  it("updates Note Links across the notebook when a note is renamed", async () => {
+    const filesystem = createStubFilesystem([]);
+    await filesystem.createDirectory("/Notes");
+    await filesystem.createDirectory("/Notes/Planning");
+    await filesystem.writeFile("/Notes/Alpha.md", "# Alpha");
+    await filesystem.writeFile(
+      "/Notes/Index.md",
+      "Read [[Alpha]] before [[Beta]]."
+    );
+    await filesystem.writeFile(
+      "/Notes/Planning/Next.md",
+      "Follow [[ alpha ]] and keep [[Beta]]."
+    );
+    const service = new NotesService(filesystem, createInMemoryPersistence());
+    await service.attach("/Notes");
+    await service.selectNote("/Notes/Alpha.md");
+
+    const renamed = await service.renameNode("/Notes/Alpha.md", "Roadmap");
+
+    expect(renamed.activeNoteId).toBe("/Notes/Roadmap.md");
+    expect(await filesystem.readFile("/Notes/Index.md")).toBe(
+      "Read [[Roadmap]] before [[Beta]]."
+    );
+    expect(await filesystem.readFile("/Notes/Planning/Next.md")).toBe(
+      "Follow [[Roadmap]] and keep [[Beta]]."
+    );
+  });
+
   it("rejects note operations outside the notebook root", async () => {
     const filesystem = createStubFilesystem([]);
     await filesystem.createDirectory("/Notes");

@@ -7,7 +7,8 @@ export default tseslint.config(
     ignores: [
       "**/dist/**",
       "**/dist-electron/**",
-      "**/Gravity/**",
+      "**/.next/**",
+      "**/next-env.d.ts",
       "**/node_modules/**",
       "**/playwright-report/**",
       "**/test-results/**",

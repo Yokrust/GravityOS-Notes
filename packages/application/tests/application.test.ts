@@ -1534,6 +1534,126 @@ describe("application bootstrap", () => {
     );
   });
 
+  it("persists a failed run when runtime startup fails", async () => {
+    const persistence = createInMemoryPersistence();
+    const service = new RunService(
+      createFixedClock("2026-04-22T20:15:00.000Z"),
+      createSequentialIdGenerator(),
+      persistence,
+      {
+        async startRun() {
+          throw new Error("Runtime unavailable.");
+        },
+        async stopRun() {
+          return;
+        },
+        async stopRunByRunId() {
+          throw new Error("No active run.");
+        }
+      }
+    );
+
+    await expect(
+      service.start({
+        projectId: "project-1",
+        threadId: "thread-1",
+        runNumber: 1,
+        prompt: "Start the first run"
+      })
+    ).rejects.toThrow("Runtime unavailable.");
+
+    await expect(persistence.loadState()).resolves.toMatchObject({
+      agentActivityItems: [
+        {
+          kind: "prompt",
+          runId: "run-1",
+          status: "completed",
+          text: "Start the first run"
+        }
+      ],
+      runResults: [
+        {
+          content: "",
+          failureMessage: "Runtime unavailable.",
+          runId: "run-1",
+          status: "failed"
+        }
+      ],
+      runs: [
+        {
+          completedAt: "2026-04-22T20:15:00.000Z",
+          id: "run-1",
+          status: "failed"
+        }
+      ]
+    });
+  });
+
+  it("serializes concurrent run starts and preserves one active run per project", async () => {
+    const persistence = createInMemoryPersistence();
+    const runtimeRunIds: string[] = [];
+    let releaseFirstRuntime = () => {};
+    const firstRuntimeStarted = new Promise<void>((resolve) => {
+      releaseFirstRuntime = resolve;
+    });
+    const service = new RunService(
+      createFixedClock("2026-04-22T20:20:00.000Z"),
+      createSequentialIdGenerator(),
+      persistence,
+      {
+        async startRun(run) {
+          runtimeRunIds.push(run.id);
+          if (run.id === "run-1") {
+            await firstRuntimeStarted;
+          }
+          return {
+            actorId: "actor-1",
+            runtimeRunId: `runtime-${run.id}`
+          };
+        },
+        async stopRun() {
+          return;
+        },
+        async stopRunByRunId() {
+          throw new Error("No active run.");
+        }
+      }
+    );
+
+    const firstStart = service.start({
+      projectId: "project-1",
+      threadId: "thread-1",
+      runNumber: 1,
+      prompt: "First run"
+    });
+    const secondStart = service.start({
+      projectId: "project-1",
+      threadId: "thread-2",
+      runNumber: 1,
+      prompt: "Second run"
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(runtimeRunIds).toEqual(["run-1"]);
+    expect((await persistence.loadState()).runs).toHaveLength(1);
+
+    releaseFirstRuntime();
+    await expect(firstStart).resolves.toMatchObject({
+      run: { id: "run-1", status: "in_progress" }
+    });
+    await expect(secondStart).rejects.toThrow(
+      "Only one active Run is allowed per Project."
+    );
+
+    const persistedState = await persistence.loadState();
+    expect(runtimeRunIds).toEqual(["run-1"]);
+    expect(persistedState.runs).toHaveLength(1);
+    expect(persistedState.runs[0]).toMatchObject({
+      id: "run-1",
+      status: "in_progress"
+    });
+  });
+
   it("loads and saves a root map draft explicitly", async () => {
     const rootPath = process.platform === "win32" ? "C:/gravity" : "/gravity";
     const filesystem = createStubFilesystem([]);

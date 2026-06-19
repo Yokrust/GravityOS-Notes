@@ -12,6 +12,8 @@ import type {
   PersistencePort,
   ProjectPathStatus
 } from "../../contracts/index.js";
+import { rewriteNoteLinksForRename } from "@gravity/domain";
+
 import { classifyMediaKind } from "./media-kind.js";
 
 const MARKDOWN_EXTENSION = ".md";
@@ -291,6 +293,10 @@ export class NotesService {
     }
 
     const safeName = normalizeNodeName(nextName);
+    const shouldRewriteNoteLinks =
+      details.kind === "file" &&
+      isMarkdownFile(nodePath) &&
+      noteName(this.filesystem.baseName(nodePath)) !== safeName;
     const destinationPath = this.filesystem.resolvePath(
       this.filesystem.directoryName(nodePath),
       details.kind === "file" ? `${safeName}${MARKDOWN_EXTENSION}` : safeName
@@ -303,6 +309,13 @@ export class NotesService {
         throw new Error("A note or folder with that name already exists.");
       }
       await this.filesystem.movePath(nodePath, destinationPath);
+    }
+    if (shouldRewriteNoteLinks) {
+      await this.rewriteNoteLinksForRenamedNote(
+        notebookRoot,
+        noteName(this.filesystem.baseName(nodePath)),
+        safeName
+      );
     }
 
     const nextPreferences = remapPreferences(
@@ -463,6 +476,25 @@ export class NotesService {
     };
   }
 
+  private async rewriteNoteLinksForRenamedNote(
+    notebookRoot: string,
+    fromTitle: string,
+    toTitle: string
+  ): Promise<void> {
+    const tree = await this.readTree(notebookRoot);
+    for (const notePath of collectNotePaths(tree)) {
+      const content = await this.filesystem.readFile(notePath);
+      const nextContent = rewriteNoteLinksForRename({
+        content,
+        fromTitle,
+        toTitle
+      });
+      if (nextContent !== content) {
+        await this.filesystem.writeFile(notePath, nextContent);
+      }
+    }
+  }
+
   private async assertDirectory(
     notebookRoot: string,
     directoryPath: string
@@ -553,6 +585,10 @@ function noteName(fileName: string): string {
 
 function fileExtension(fileName: string): string {
   return fileName.toLowerCase().match(/(\.[a-z0-9]+)$/)?.[1] ?? "";
+}
+
+function isMarkdownFile(path: string): boolean {
+  return path.toLowerCase().endsWith(MARKDOWN_EXTENSION);
 }
 
 function sanitizeAssetName(value: string): string {

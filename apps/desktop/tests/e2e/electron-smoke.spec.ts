@@ -23,7 +23,7 @@ test("renders the Electron workspace", async () => {
     await expect(
       window.getByRole("button", { exact: true, name: "Notes" })
     ).toBeVisible();
-    await expect(window.getByText("Cuaderno")).toBeVisible();
+    await expect(window.locator(".notebook-label")).toHaveText("Cuaderno");
 
     await window.screenshot({ fullPage: true, path: screenshotPath });
   } finally {

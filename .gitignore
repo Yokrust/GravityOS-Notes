@@ -3,6 +3,8 @@ node_modules/
 package-lock.json
 dist/
 dist-electron/
+.next/
+next-env.d.ts
 playwright-report/
 test-results/
 coverage/

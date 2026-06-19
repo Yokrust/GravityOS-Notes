@@ -95,6 +95,66 @@ interface NotesNavigationState {
   expandedFolders: Record<string, boolean>;
 }
 
+type NotesProposedChange =
+  | {
+      content: string;
+      id: string;
+      path: string;
+      type: "createNote";
+    }
+  | {
+      content: string;
+      id: string;
+      path: string;
+      type: "editNote";
+    }
+  | {
+      content: string;
+      id: string;
+      path: string;
+      type: "appendNote";
+    }
+  | {
+      id: string;
+      nextName: string;
+      path: string;
+      type: "renameNode";
+    }
+  | {
+      id: string;
+      path: string;
+      targetFolderPath: string;
+      type: "moveNote";
+    }
+  | {
+      id: string;
+      path: string;
+      type: "deleteNote";
+    }
+  | {
+      id: string;
+      path: string;
+      type: "createFolder";
+    };
+
+interface NotesScratchpadChangePreview {
+  afterContent?: string;
+  afterPath?: string;
+  beforeContent?: string;
+  beforePath?: string;
+  change: NotesProposedChange;
+}
+
+interface NotesScratchpadState {
+  changes: NotesScratchpadChangePreview[];
+  isOpen: boolean;
+}
+
+interface NotesScratchpadApplyResult {
+  notes: NotesStateRecord;
+  scratchpad: NotesScratchpadState;
+}
+
 interface RunRecord {
   agentActivityItems: AgentActivityItem[];
   activityRows: RunActivityRow[];
@@ -475,6 +535,21 @@ contextBridge.exposeInMainWorld("gravity", {
     ) as Promise<NotesStateRecord>,
   deleteNotebookNode: async (nodePath: string) =>
     ipcRenderer.invoke("notes:delete", nodePath) as Promise<NotesStateRecord>,
+  getNotesScratchpad: async () =>
+    ipcRenderer.invoke("notes:get-scratchpad") as Promise<NotesScratchpadState>,
+  stageNotesScratchpad: async (changes: NotesProposedChange[]) =>
+    ipcRenderer.invoke(
+      "notes:stage-scratchpad",
+      changes
+    ) as Promise<NotesScratchpadState>,
+  acceptNotesScratchpad: async () =>
+    ipcRenderer.invoke(
+      "notes:accept-scratchpad"
+    ) as Promise<NotesScratchpadApplyResult>,
+  rejectNotesScratchpad: async () =>
+    ipcRenderer.invoke(
+      "notes:reject-scratchpad"
+    ) as Promise<NotesScratchpadState>,
   loadMapDraft: async (
     projectId: string,
     rootPath: string,
